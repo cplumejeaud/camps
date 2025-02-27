@@ -3,7 +3,7 @@
 -- Auteur : Christine PLUMEJEAUD-PERREAU, UMR 7301 MIGRINTER
 -- Date de creation : 27/09/2024
 -- Date de mise à jour : 26/02 (par copie de camps6.sql)
--- Base de données camps_europe sur mapuce (TGIR humanum)
+-- Base de données camps_europe sur mapuce (TGIR humanum)******
 ---------------------------------------------
 
 -- camps 8
@@ -1897,7 +1897,7 @@ alter table planet_osm_polygon set schema poland;
 alter table planet_osm_roads set schema poland;
 
 -- Import  spain
-export PGPASSWORD="lys79"
+export PGPASSWORD="*******"
 nohup osm2pgsql -d osm -U postgres -c -s --drop  /data/osm/spain-latest.osm.pbf > out.txt &
 
 select     table_schema || '.' || table_name as show_tables
@@ -1983,7 +1983,7 @@ drop view public.osm_polygon;
 -- correction du type de population
 create or replace VIEW  public.osm_polygon AS
             SEsLECT osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.austria.planet_osm_polygon a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''childcare'', ''kindergarten'', ''college'', ''community_centre'',  ''post_office'', ''clinic'',  ''internet_cafe'')
@@ -2015,7 +2015,7 @@ wales'*/
 
 create or replace VIEW  public.osm_point_uk AS
             SELECT osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.england.planet_osm_point a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''college'', ''community_centre'', ''social_centre'', ''bureau_de_change'', ''language_school'', ''internet_cafe'')
@@ -2117,7 +2117,7 @@ drop VIEW  public.osm_polygon_uk;
 
 create or replace VIEW  public.osm_polygon_uk AS
             SELECT osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.isle_of_man.planet_osm_polygon a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''childcare'', ''kindergarten'', ''college'', ''community_centre'',  ''post_office'', ''clinic'',  ''internet_cafe'')
@@ -2238,7 +2238,7 @@ thueringen
            
 create or replace VIEW  public.osm_point_germany AS
             SELECT osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.baden_wuerttemberg.planet_osm_point a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''college'', ''community_centre'', ''social_centre'', ''bureau_de_change'', ''language_school'', ''internet_cafe'')
@@ -2551,7 +2551,7 @@ drop VIEW  public.osm_polygon_germany;
 
 create or replace VIEW  public.osm_polygon_germany AS
             SELECT osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.baden_wuerttemberg.planet_osm_polygon a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''childcare'', ''kindergarten'', ''college'', ''community_centre'',  ''post_office'', ''clinic'',  ''internet_cafe'')
@@ -2865,7 +2865,7 @@ select * from  public.osm_point_germany opg limit 2;
            
 create or replace VIEW  public.osm_point_portugal AS
             SELECT osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.portugal.planet_osm_point a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''college'', ''community_centre'', ''social_centre'', ''bureau_de_change'', ''language_school'', ''internet_cafe'')
@@ -2909,7 +2909,7 @@ create or replace VIEW  public.osm_point_portugal AS
 
 create or replace VIEW  public.osm_polygon_portugal AS
             SELECT osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.portugal.planet_osm_polygon a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''childcare'', ''kindergarten'', ''college'', ''community_centre'',  ''post_office'', ''clinic'',  ''internet_cafe'')
@@ -2952,7 +2952,7 @@ create or replace VIEW  public.osm_polygon_portugal AS
 
 create or replace VIEW  public.osm_point AS
             SELECT osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.austria.planet_osm_point a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''college'', ''community_centre'', ''social_centre'', ''bureau_de_change'', ''language_school'', ''internet_cafe'')
@@ -2976,7 +2976,7 @@ create or replace VIEW  public.osm_point AS
            
 create or replace VIEW  public.osm_polygon AS
             SELECT osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.austria.planet_osm_polygon a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''childcare'', ''kindergarten'', ''college'', ''community_centre'',  ''post_office'', ''clinic'',  ''internet_cafe'')
@@ -3575,7 +3575,7 @@ where unique_id in ('196', '202', '210');
 --- Canaries : canary_islands
 create or replace VIEW  public.osm_point_canary AS
             SELECT osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.canary_islands.planet_osm_point a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''college'', ''community_centre'', ''social_centre'', ''bureau_de_change'', ''language_school'', ''internet_cafe'')
@@ -3599,7 +3599,7 @@ create or replace VIEW  public.osm_point_canary AS
 
 create or replace VIEW  public.osm_polygon_canary AS
             SELECT osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.canary_islands.planet_osm_polygon a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''childcare'', ''kindergarten'', ''college'', ''community_centre'',  ''post_office'', ''clinic'',  ''internet_cafe'')
@@ -3625,7 +3625,7 @@ create or replace VIEW  public.osm_polygon_canary AS
     
 create or replace VIEW  public.osm_point_dom_france AS
             SELECT osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.guadeloupe.planet_osm_point a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''college'', ''community_centre'', ''social_centre'', ''bureau_de_change'', ''language_school'', ''internet_cafe'')
@@ -3727,7 +3727,7 @@ create or replace VIEW  public.osm_point_dom_france AS
 
 create or replace VIEW  public.osm_polygon_dom_france AS
             SELECT osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
-            FROM dblink('dbname=osm user=postgres password=lys79 options=-csearch_path=',
+            FROM dblink('dbname=osm user=postgres password=****** options=-csearch_path=',
                         'select osm_id, way, name, admin_level, population, aeroway,amenity,boundary,building,highway,landuse,leisure,man_made,military,office,power,public_transport,railway,shop,waterway 
                             from osm.guadeloupe.planet_osm_polygon a 
                             where amenity in (''atm'',''bus_station'',''clinic'',''dentist'',''doctors'',''drinking_water'',''hospital'',''pharmacy'',''recycling'',''townhall'',''water_point'', ''post_box'', ''post_office'', ''school'', ''childcare'', ''kindergarten'', ''college'', ''community_centre'',  ''post_office'', ''clinic'',  ''internet_cafe'')
