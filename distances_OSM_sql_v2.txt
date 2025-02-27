@@ -1,0 +1,244 @@
+-----------------------------------------------------------------------------------------------------------------
+-- Auteur : Christine PLUMEJEAUD-PERREAU, UMR 7301 Migrinter
+-- Date : 05/01/2025
+-- Projet : thèse de Louis Fernier
+-- MISE à jour des distance aux aménités OSM, arrondies au mètre
+-- Dérive de distances_OSM_sql.txt
+-- Agit sur camps 7 AVEC restriction sur la liste des camps mis à jour
+-----------------------------------------------------------------------------------------------------------------
+
+update camps.camps7  c set ecole_hors_camp_distance_km = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity in ('school', 'college') or building in ('school', 'college') ) and c.iso3 in ('{0}') and c.point3857 is not null
+    and unique_id in ({2})
+	group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity in ('school', 'college') or building in ('school', 'college')) and c.iso3 in ('{1}') and c.point3857 is not null
+	and unique_id in ({2})
+    group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and ecole_hors_camp_distance_km is null and  c.unique_id in ({2});
+
+update camps.camps7  c set poste_hors_camp_distance_km = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity in ('post_box', 'post_office') ) and c.iso3 in ('{0}') and c.point3857 is not null
+    and  unique_id in ({2})
+	group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity in ('post_box', 'post_office')) and c.iso3 in ('{0}') and c.point3857 is not null
+    and  unique_id in ({2})
+	group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and poste_hors_camp_distance_km is null and  c.unique_id in ({2});
+
+
+
+update camps.camps7  c set avocat_hors_camp_distance_km = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (office = 'lawyer' ) and c.iso3 in ('{0}') and c.point3857 is not null and  unique_id in ({2})
+	group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (office = 'lawyer') and c.iso3 in ('{1}') and c.point3857 is not null and  unique_id in ({2})
+	group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and avocat_hors_camp_distance_km is null and  c.unique_id in ({2});
+
+
+update camps.camps7  c set dentiste_hors_camp_distance_km = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity in ('dentist') ) and c.iso3 in ('{0}') and c.point3857 is not null and  unique_id in ({2})
+	group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity in ('dentist') ) and c.iso3 in ('{1}') and c.point3857 is not null and  unique_id in ({2})
+	group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and dentiste_hors_camp_distance_km is null and  c.unique_id in ({2});
+
+
+update camps.camps7  c set atm_distance = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity='atm') and c.iso3 in ('{0}') and c.point3857 is not null and  unique_id in ({2})
+	group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity='atm' ) and c.iso3 in ('{1}') and c.point3857 is not null and  unique_id in ({2})
+	group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and c.atm_distance is null and  c.unique_id in ({2});
+
+
+update camps.camps7  c set hopital_distance = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity in ('hospital', 'clinic') or building in ('hospital', 'clinic')) and c.iso3 in ('{0}') and c.point3857 is not null
+    and  unique_id in ({2})
+	group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity in ('hospital', 'clinic') or building in ('hospital', 'clinic')) and c.iso3 in ('{1}') and c.point3857 is not null
+    and  unique_id in ({2})
+	group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and hopital_distance is null and  c.unique_id in ({2});
+ 
+
+update camps.camps7  c set pharmacie_distance = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity in ('pharmacy') or shop in ('chemist', 'medical_supply')) and c.iso3 in ('{0}') and c.point3857 is not null
+    and  unique_id in ({2})
+	group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity in ('pharmacy') or shop in ('chemist', 'medical_supply')) and c.iso3 in ('{1}') and c.point3857 is not null
+    and  unique_id in ({2})
+	group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and pharmacie_distance is null and  c.unique_id in ({2});
+
+
+update camps.camps7  c set arret_bus_distance_km = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity in ('bus_station') or highway='bus_stop' or public_transport='platform' or  railway='platform') and c.iso3 in ('{0}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity in ('bus_station') or highway='bus_stop' or public_transport='platform' or  railway='platform') and c.iso3 in ('{1}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and arret_bus_distance_km is null and  c.unique_id in ({2});
+
+
+
+
+update camps.camps7  c set gare_distance_km = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (railway='station' or railway='halt' or building='train_station' or  public_transport='station' ) and c.iso3 in ('{0}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (railway='station' or railway='halt' or building='train_station' or  public_transport='station' ) and c.iso3 in ('{1}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and gare_distance_km is null and  c.unique_id in ({2});
+
+
+update camps.camps7  c set medecin_clinique_hors_camp_distance_km = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity in ('clinic', 'doctors') or building in ('clinic', 'healthcare')) and c.iso3 in ('{0}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity in ('clinic', 'doctors') or building in ('clinic', 'healthcare')) and c.iso3 in ('{1}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and medecin_clinique_hors_camp_distance_km is null and  c.unique_id in ({2});
+
+update camps.camps7  c set mairie_distance = round((dkm/ 1000.0)::numeric, 1)
+from (
+	select unique_id , min(dkm) as dkm from (
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'point'
+	from public.osm_point osm , camps.camps7  c
+	where (amenity='townhall' or building = 'townhall') and c.iso3 in ('{0}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	union 
+	(
+	select c.unique_id , min(st_distance(osm.way, c.point3857)) as dkm, 'polygon'
+	from public.osm_polygon osm , camps.camps7  c
+	where (amenity='townhall' or building = 'townhall' ) and c.iso3 in ('{1}') and c.point3857 is not null
+	and  unique_id in ({2})
+    group by c.unique_id
+	)
+	) as u 
+	group by unique_id
+) as k 
+where k.unique_id = c.unique_id and c.mairie_distance is null and  c.unique_id in ({2});
