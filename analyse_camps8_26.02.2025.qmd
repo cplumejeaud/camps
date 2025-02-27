@@ -1,0 +1,775 @@
+---
+title: "analyse_camps8_26.02.2025"
+author: "Christine Plumejeaud-Perreau"
+format: html
+editor: visual
+---
+
+**Script analyse des camps de Louis Fernier (v8)**
+
+Les CLC ont été recalculés en distance km, mais sans arrondi, le 26/02/2025
+
+camps8 sur le serveur mapuce et ma machine en localhost sont identiques.
+
+Reprend le script C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024/analyse_camps7_22.01.2025.R et le structure dans un document.
+
+# Setting de l'environnement
+
+```{r}
+meslibrairiesR <- "C:/Tools/R/Rlibs4.4"
+# Ajouter meslibrairiesR dans ces chemins : s
+.libPaths(c( .libPaths(), meslibrairiesR) )
+
+R.version #version.string R version 4.2.1 (2022-06-23 ucrt)
+#version.string R version 4.4.2 (2024-10-31 ucrt)
+
+library(tidyverse)
+library(survival)
+library(hms)
+library(here)
+library(scales)
+library(labelled) #dur
+
+
+library(FactoMineR) #POur faire les ACP, les AFC et les CAH
+library(ade4)
+library(devEMF)
+library(Factoshiny)
+library(explor)
+
+library(RPostgreSQL)
+library(cluster)#R 4.2.3
+
+# install.packages("cluster", update = TRUE)
+# 
+# packageurl <- "https://cran.r-project.org/src/contrib/ClusterR_1.3.3.tar.gz"
+# install.packages(packageurl, repos=NULL, type="source")
+# 
+# install.packages("RPostgreSQL", update = TRUE)
+
+setwd("C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024")
+dir.create(file.path(getwd(), './figuresAFCM'))
+
+ici <- file.path(getwd())
+#save.image(file=paste(ici,"export_workspace.RData", sep="/")) 
+
+#rm(camps)
+```
+
+# Récupération des données sur ma base locale
+
+```{r}
+## Depuis la BDD
+con <- dbConnect(dbDriver("PostgreSQL"), host='localhost', port='5432', dbname='camps_europe', user='postgres', password='postgres')
+
+#st_asewkt(geom), 
+a1 <- "camp_latitude, camp_longitude, type_camp, iso3, prison, degurba "
+a2 <- " clc_majoritaire_13_mixte, eloignementschengen " 
+a3 <- "infrastructure_norm,	infrastructure_avant_conversion,	infrastructure_solidite,	infrastructure_confort"
+a4 <- "pays_population, pays_surfacekm2, ville_proche_population, distance_ville_proche"
+a5 <- "mairie_distance, atm_distance, hopital_distance, pharmacie_distance, arret_bus_distance_km"
+a6 <-  "gare_distance_km, medecin_clinique_hors_camp_distance_km, dentiste_hors_camp_distance_km "
+a7 <- " ecole_hors_camp_distance_km, poste_hors_camp_distance_km"
+a8 <- " distance_13_mines_decharges_chantiers, distance_124_aeroport, distance_123_zones_portuaires, distance_122_reseaux_routiers"
+a9 <- " distance_24_zones_agricoles_heterogenes, distance_41_zones_humides_interieures"
+a10 <- "distance_121_zi_zac, distanceschengenkm "
+a11 <- "eurostat_pop_2019, camps_commune_surfacekm2"
+a12 <- "coalesce(capacite_2023, coalesce(capacite_2022::int, coalesce(capacite_2021, coalesce(capacite_2020, coalesce(capacite_2019, coalesce(capacite_2018, coalesce(capacite_2017::int, null))))))) as capacite"
+a13 <- "clc_majoritaire_2, clc_majoritaire_3,clc_majoritaire_23_mixte"
+
+ 
+attributes <- paste("select unique_id, nom_unique", a1, a2, a13, a3, a4, a5, a6, a7, 
+                    a8, a9, a10, a11, a12, sep=",")
+
+clause <- "from camps.camps8 p where clc_majoritaire_13_mixte is not null and iso3 != 'UKR'
+and point3857 is not null and doublon='Non' and unique_id not in ('202', '196', '210', '865') 
+and localisation_qualite in ('vérifiée', 'quartier') and actif_dernieres_infos = 'oui' 
+and derniere_date_info::int>= 2018 order by pays"
+
+####Lecture
+
+
+data <- dbGetQuery(con, paste(attributes, clause))
+
+```
+
+##### sauvegarde
+
+```{r}
+write.table(data, "./camps8_27-02-2025_data.csv", sep = ";", row.names=F)
+
+```
+
+##### conversion des variables et création du dataframe camps
+
+```{r}
+
+camps <- data.frame(data) |> 
+  mutate(unique_id = as.character(unique_id) ) |>
+  mutate_at(vars(iso3, eloignementschengen, type_camp, degurba ), list(as.factor)) |>
+  mutate_at(vars(infrastructure_norm, infrastructure_avant_conversion,	infrastructure_solidite,	infrastructure_confort ), list(as.factor)) |>
+  mutate_at(vars( clc_majoritaire_13_mixte, clc_majoritaire_2, clc_majoritaire_3,clc_majoritaire_23_mixte), list(as.factor)) |>
+  mutate_at(vars(mairie_distance, atm_distance, hopital_distance, pharmacie_distance, arret_bus_distance_km), list(as.numeric)) |>
+  mutate_at(vars(gare_distance_km, medecin_clinique_hors_camp_distance_km, dentiste_hors_camp_distance_km), list(as.numeric)) |>
+  mutate_at(vars(ecole_hors_camp_distance_km, poste_hors_camp_distance_km), list(as.numeric)) |>
+  mutate_at(vars(distance_13_mines_decharges_chantiers, distance_124_aeroport, distance_123_zones_portuaires, distance_122_reseaux_routiers), list(as.numeric)) |>
+  mutate_at(vars(distance_24_zones_agricoles_heterogenes, distance_41_zones_humides_interieures, distance_121_zi_zac), list(as.numeric)) |>
+  mutate_at(vars( pays_population, pays_surfacekm2, ville_proche_population, distance_ville_proche  ), list(as.numeric))|>
+  mutate_at(vars( eurostat_pop_2019, camps_commune_surfacekm2, distanceschengenkm ), list(as.numeric))|>
+  mutate_at(vars( capacite ), list(as.numeric))|>
+  mutate(ecart_densites = log10((eurostat_pop_2019 / camps_commune_surfacekm2)/(pays_population / pays_surfacekm2)) ) 
+
+#colnames(data)
+#row.names(data) <- data$nom_unique
+```
+
+##### Traitement des facteurs
+
+```{r}
+## Traitement des facteurs
+levels(camps$clc_majoritaire_13_mixte)
+
+etiq_clc_mixte = c(
+  "Territoires agricoles",
+  "Forêts et milieux semi-naturels",
+  "Surfaces en eau",
+  "Tissu urbain continu",
+  "Tissu urbain discontinu",
+  "Zones industrielles ou commerciales et installations publiques",
+  "Réseaux routier et ferroviaire et espaces associés",
+  "Zones portuaires",
+  "Aéroports",
+  "Extraction de matériaux",
+  "Chantiers",
+  "Espaces verts urbains",
+  "Equipements sportifs et de loisirs")   
+ 
+etiq_deg_urba=c("ville", "banlieue", "rural") 
+
+q <- "select distinct iso3, pays from camps.camps7"
+flags <- dbGetQuery(con, q)
+
+test <- levels(camps$iso3)
+match(test, flags$iso3)
+etiq_iso3 <- flags[match(test, flags$iso3),]$pays
+
+
+#levels(camps$eloignementschengen)
+
+# eloignementschengen, infrastructure_solidite,	infrastructure_confort : ordonnée
+# clc_majoritaire_23_mixte : etiquette ?
+#   degurba  : etiquette  1 - (ville) - 2 (banlieue) - 3 (rural)
+# pays = label de iso3
+camps <- camps |>  
+  mutate (infrastructure_solidite = factor(infrastructure_solidite, levels = c( 1, 2, 3, 4), ordered=T))|> 
+  mutate (infrastructure_confort = factor(infrastructure_confort, levels = c( 1, 2, 3, 4), ordered=T))|>
+  mutate (clc_majoritaire_13_mixte = factor(clc_majoritaire_13_mixte, levels(camps$clc_majoritaire_13_mixte), labels=etiq_clc_mixte )) |>
+  mutate (degurba = factor(degurba, levels = c(1, 2, 3), labels=etiq_deg_urba ))|>
+  mutate (prison = factor(prison))
+  
+  
+  
+camps |> nrow() #994
+
+
+```
+
+##### Sauver ce nettoyage des étiquettes CLC
+
+```{r}
+
+
+camps |> filter(infrastructure_norm == 'inconnu') |> select(unique_id, infrastructure_norm)
+camps |> filter(infrastructure_norm == 'pas de conversion') |> select(unique_id, infrastructure_norm)
+camps |> filter(infrastructure_norm == 'bungalows') |> select(unique_id, infrastructure_norm)
+
+camps |> select(infrastructure_norm) |> unique()
+
+#camps$infrastructure_norm <- fct_na_value_to_level(camps$infrastructure_norm, "inconnu") #corrigé dans la BDD
+#camps$infrastructure_avant_conversion <- fct_na_value_to_level(camps$infrastructure_avant_conversion, "pas de conversion")   #corrigé dans la BDD
+
+write.table(camps, "./camps8_27-02-2025.csv", sep = "\t", row.names=F)
+```
+
+## Traitement des valeurs manquantes
+
+##### Pour une variable factorielle
+
+```{r}
+#Remplacer la valeur manquante d'une variable factorielle
+camps <- camps |> 
+  mutate(
+    across(
+      where(is.factor),
+      \(x) fct_na_value_to_level(x, "(manquant)")
+    )
+  )
+```
+
+Pour une variable numérique
+
+```{r}
+#Remplacer la valeur manquante d'une variable numerique
+camps <- camps |> 
+  mutate(
+    across(
+      where(is.numeric),
+      \(x) replace_na(x, mean(x, na.rm=TRUE))
+    )
+  )
+
+```
+
+## Traitement des valeurs exceptionnelles
+
+##### Fonction qui remplace les valeurs exceptionnelles par le 95 centile
+
+```{r}
+# Fonction qui remplace les valeurs exceptionnelles par le 95 centile
+replace_outlier <- function (vecteur_numeric) {
+  y <- quantile(vecteur_numeric, probs = c(0, 0.05, 0.95, 1), type=4, na.rm=T)
+  for (i in 1:length(vecteur_numeric)) {
+    #print(vecteur_numeric[i])
+    if (!is.na(vecteur_numeric[i]) & vecteur_numeric[i] > y[3]) {
+      vecteur_numeric[i] <- y[3]
+    }
+  }
+  return(vecteur_numeric)
+}
+```
+
+##### Remplacer la valeur exceptionnelle uniquement pour les colonnes choisies
+
+Au passage, regarder la distribution des valeurs avant, puis après et sauvegarder les graphiques dans figuresAFCM
+
+```{r}
+colnames(camps[, -c(1:14)])
+
+cols <- c("distance_13_mines_decharges_chantiers", "distance_124_aeroport", "distance_123_zones_portuaires", "distance_122_reseaux_routiers", "distance_24_zones_agricoles_heterogenes", "distance_41_zones_humides_interieures",
+          "distance_121_zi_zac",
+          "ville_proche_population", "distance_ville_proche",
+          "mairie_distance", "atm_distance", "hopital_distance", "pharmacie_distance",
+          "arret_bus_distance_km", "gare_distance_km",
+          "medecin_clinique_hors_camp_distance_km", "dentiste_hors_camp_distance_km",
+          "ecole_hors_camp_distance_km", "poste_hors_camp_distance_km",
+          "distanceschengenkm", "ecart_densites", "capacite")
+
+for (i in 1:length(cols)) {
+  vecteur <- camps[, (colnames(camps) %in% cols[i])]
+  #dev.off()
+  par(mar=c(5, 5, 2, 5)) 
+  hist(vecteur, 
+       #breaks = c(0,50, 100,200, 300, 400,500,750,1000), 
+       main = paste("Distribution de ", cols[i]), 
+       xlab=cols[i], 
+       freq = T)
+  dev.copy(png,paste(paste('./figuresAFCM/Exception_distribution_', cols[i], sep= ''), '.png', sep= ''))
+  dev.off()
+}
+
+#Remplacement des valeurs exceptionnelles pour les colonnes choisies (cols)
+camps <- camps |> 
+  mutate(
+    across(
+      all_of(cols),
+      \(x) replace_outlier(x)
+    )
+  )
+
+for (i in 1:length(cols)) {
+  vecteur <- camps[, (colnames(camps) %in% cols[i])]
+  #dev.off()
+  par(mar=c(5, 5, 2, 5)) 
+  hist(vecteur, 
+       #breaks = c(0,50, 100,200, 300, 400,500,750,1000), 
+       main = paste("Distribution de ", cols[i]), 
+       xlab=cols[i], 
+       freq = T)
+  dev.copy(png,paste(paste('./figuresAFCM/SansException_distribution_', cols[i], sep= ''), '.png', sep= ''))
+  dev.off()
+}
+
+```
+
+##### Sauver pour Louis
+
+```{r}
+write.table(camps, "./camps8_27-02-2025-sansNAniOUTLIERS.csv", sep = ";", row.names = FALSE)
+
+```
+
+# AFCM
+
+##### lire les données préparées au cas où
+
+```{r}
+camps<- read.delim("./camps8_27-02-2025-sansNAniOUTLIERS.csv", header = TRUE, sep = "\t", encoding="UTF8", stringsAsFactors = TRUE)
+
+```
+
+<https://larmarange.github.io/guide-R/analyses_avancees/analyse-factorielle.html>
+
+##### Retirer les données qui ne vont pas dans l'AFCM
+
+-   unique_id nom camp_latitude camp_longitude type_camp iso3
+
+-   eloignementschengen, distanceschengenkm
+
+-   infrastructure_norm, infrastructure_avant_conversion infrastructure_confort et infrastructure_solidite
+
+-   pays_population, pays_surfacekm2
+
+-   eurostat_pop_2019, camps_commune_surfacekm2
+
+-   distance_123_zones_portuaires
+
+-   capacite
+
+```{r}
+#colnames(camps[, ])
+
+#tododf = camps[, -c(1:7,  10:19, 34, 38:41)]
+
+cols <- c("degurba",  "clc_majoritaire_13_mixte", "distance_13_mines_decharges_chantiers", "distance_124_aeroport",  "distance_122_reseaux_routiers", "distance_24_zones_agricoles_heterogenes", "distance_41_zones_humides_interieures", "distance_121_zi_zac",
+          "ville_proche_population", "distance_ville_proche",
+          "mairie_distance", "atm_distance", "hopital_distance", "pharmacie_distance",
+          "arret_bus_distance_km", "gare_distance_km",
+          "medecin_clinique_hors_camp_distance_km", "dentiste_hors_camp_distance_km",
+          "ecole_hors_camp_distance_km", "poste_hors_camp_distance_km",
+           "ecart_densites")
+
+
+tododf <- camps |> select(all_of(cols))
+  
+colnames(tododf)
+
+```
+
+On garde :
+
+```         
+[1] "degurba"                                 "clc_majoritaire_13_mixte"                "distance_13_mines_decharges_chantiers"   "distance_124_aeroport"                  
+ [5] "distance_122_reseaux_routiers"           "distance_24_zones_agricoles_heterogenes" "distance_41_zones_humides_interieures"   "distance_121_zi_zac"                    
+ [9] "ville_proche_population"                 "distance_ville_proche"                   "mairie_distance"                         "atm_distance"                           
+[13] "hopital_distance"                        "pharmacie_distance"                      "arret_bus_distance_km"                   "gare_distance_km"                       
+[17] "medecin_clinique_hors_camp_distance_km"  "dentiste_hors_camp_distance_km"          "ecole_hors_camp_distance_km"             "poste_hors_camp_distance_km"            
+[21] "ecart_densites" 
+```
+
+##### Exécuter l'AFCM avec le package ade4
+
+```{r}
+row.names(tododf) <- camps$unique_id 
+library(ade4)
+
+#On ne retient que deux axes : nf = 2
+
+afcm = dudi.mix(tododf, scannf = FALSE, nf=2)
+
+```
+
+##### Examen des valeurs propres et de la variance expliquée par le premier plan
+
+```{r}
+
+## Valeurs propres
+afcm$eig
+#[1]   8.0407936 2.4568748 1.4936586
+
+## Inertie (ou variance expliquée associée à chaque axe)
+inertie <- afcm$eig/sum(afcm$eig) * 100
+#[1] 23.6493928  7.2261023  4.3931135  4.1956861  ....
+# 
+## Eboulis des valeurs propres
+#dev.off()
+barplot( inertie[inertie > 1] , ylab = "% d'inertie", names.arg = round(inertie[inertie > 1], 2))
+title("Eboulis des valeurs propres en %")
+dev.copy(png,'./figuresAFCM/eboulis_afcm_22jan2025.png')
+dev.off()
+
+## Variance cumulée expliquée
+#dev.off()
+inertie_cumulee <- round(cumsum(100 * afcm$eig/sum(afcm$eig)), 2)
+# 23.14  30.55  35.05  39.03  42.69  46.12  49.45  52.61
+
+## Graphique montrant la variance cumulée exploiquée
+barplot(inertie_cumulee , main="Pourcentage d'inertie cumulée")
+dev.copy(png,'./figuresAFCM/inertie_afcm_22jan2025.png')
+dev.off()
+
+```
+
+Le premier plan explique 30% de la variance (c'est pas beaucoup, mais courant avec une AFCM).
+
+##### Liens entre les variables (scatter plot)
+
+```{r}
+## Voir le lien entre les variables
+adegraphicsLoaded()
+
+##Axe 1 et 2
+#png("./figuresAFCM/scatter_1_2.png",width=3.25,height=3.25,units="in",res=1200, pointsize = 4)
+scatter(afcm, xax = 1, yax = 2, clab.row = 0.25, clab.col = 0.75)
+dev.copy(png,'./figuresAFCM/scatter_1_2_var.png')
+dev.off()
+
+
+#clab.col = c(rep("pink", nrow(afcm$co)), rep("grey", nrow(afcm$li)))
+
+scatter(afcm, xax = 1, yax = 2, clab.row = 0.50,  clab.col = 0.75)
+dev.copy(png,'./figuresAFCM/scatter_1_2.png')
+dev.off()
+#, colors= c("pink", "blue")
+
+##Axe 1 et 3
+# scatter(afcm, xax = 1, yax = 3, clab.row = 0.50, clab.col = 0.75)
+# dev.copy(png,'./figuresAFCM/scatter_1_3.png')
+# dev.off()
+```
+
+#### Coordonnées des variables sur les 3 axes
+
+```{r}
+round(afcm$co, 2)
+write.table(round(afcm$co, 2), "./figuresAFCM/coordvar.csv", sep = "\t",  row.names = FALSE)
+
+## Positionnement des variables sur les axes
+modal <- as.data.frame(afcm$co)
+
+```
+
+##### axe1
+
+```{r}
+modal <- modal[sort.list(modal$Comp1), ]
+#dev.off()
+dotchart(modal[, 1], labels=row.names(modal), cex=0.8)
+## Y'en a trop : on va filtrer sur les valeurs extremes (qui contribue donc le plus sur l'axe). 
+
+
+## Les deciles 0.2 et 0.8 de la distribution de modal$Comp1
+y <- quantile(modal$Comp1, probs = c(0, 0.3, 0.7, 1), type=4)
+# 0%         30%         70%        100% 
+#   -1.90606873 -0.25173463  0.06704191  0.12312294
+
+hist(modal$Comp1)
+sortedaxe1 <- modal[ order(modal[,1]), ]
+filter1 <- sortedaxe1[sortedaxe1$Comp1 < y[2] | sortedaxe1$Comp1 > y[3]  ,  ]
+
+#dev.off()
+par(
+  mar      = c(2, 1, 2, 2),
+  xaxs     = "i",
+  yaxs     = "i",
+  cex.axis = 1,
+  cex.lab  = 1
+)
+dotchart(filter1[, 1], labels=row.names(filter1), cex=0.9, offset = 1/15)
+title("Répartition des modalités sur l'axe 1", cex.main = 1,   font.main= 4, col.main= "blue" )
+#, outer = TRUE
+dev.copy(png,'./figuresAFCM/axe1_22jan2025.png')
+dev.off()
+
+# L'axe 1 oppose les camps dans les villes proches des réseaux routiers et avec des densités locales très fortes aux camps 
+# localisés dans les millieux moins anthropisés voir rural loin d'ATM, dentiste, medecine et parfois hors degurba
+
+
+```
+
+##### **axe 2**
+
+```{r}
+
+y <- quantile(modal$Comp2, probs = c(0, 0.3, 0.7, 1), type=4)
+
+hist(modal$Comp2)
+
+sortedaxe2 <- modal[ order(modal[,2]), ]
+filter2 <- sortedaxe2[sortedaxe2$Comp2 < y[2]   | sortedaxe2$Comp2 > y[3],  ]
+
+#dev.off()
+par(mar = c(2, 1, 2, 2), xaxs = "i",   yaxs = "i", cex.axis = 1, cex.lab  = 1)
+dotchart(filter2[, 2], labels=row.names(filter2), cex=0.9, offset = 1/15)
+title("Répartition des modalités sur l'axe 2", cex.main = 1,   font.main= 4, col.main= "blue" )
+dev.copy(png,'./figuresAFCM/axe2_22jan2025.png')
+dev.off()
+```
+
+axe 1 et axe 2 côte à côte
+
+```{r}
+## Les deux cote à cote
+# fin.width=12, fin.height=4 , offset=0.2
+#dev.off()
+op <- par(mfrow=c(1,2), mar = c(3, 0.5, 2, 0.3), 
+          xaxs = "i",   yaxs = "i", cex.axis = 1, cex.lab  = 1)
+dotchart(filter1[, 1], labels=row.names(filter1), cex=1.2,  pt.cex=1.1)
+title("Répartition des modalités sur l'axe 1", cex.main = 1, font.main= 4, col.main= "blue" )
+dotchart(filter2[, 2], labels=row.names(filter2), cex=1.2,  pt.cex=1.1)
+title("Répartition des modalités sur l'axe 2", cex.main = 1,   font.main= 4, col.main= "blue" )
+dev.copy(png,'./figuresAFCM/axe1-et-2_22jan2025.png', width=1000, heigh=600)
+dev.off()
+
+```
+
+#### Qualité de la représentation des variables et relations entre elles
+
+```{r}
+## Calcul de l'inertie des colonnes pour sélectionner les variables contribuant beaucoup ET bien représentées dans le plan d'analyse
+inertieC <-inertia.dudi(afcm, col.inertia = TRUE)
+
+inertieC$col.abs/100 #contribution
+inertieC$col.rel/100 #qualité
+
+### Inertie totale
+inertie <- afcm$eig/sum(afcm$eig)*100
+#[1]  23.1423764  7.4095770 
+## Qualité du plan 1/2 :  23.1423764  7.4095770 
+```
+
+##### Qualité des colonnes
+
+```{r}
+### Qualité des colonnes en % :  
+inertieC$col.rel/100
+variables <- rownames(inertieC$col.rel)
+## Récuperer les variables bien représentées dans le plan 1/2
+V <- variables [(abs(inertieC$col.rel[, 1]) + abs(inertieC$col.rel[, 2])) > (inertie[1] + inertie[2])]
+nameVar <- match(V, rownames(inertieC$col.rel))
+#nameVar <- grep('TRUE', abs(inertieC$col.rel[,1]/100) + abs(inertieC$col.rel[,2]/100) > (inertie[1] + inertie[2]) & abs(inertieC$col.abs[,1]/100) > #0.5 | abs(inertieC$col.abs[,2]/100) > 0.5)
+rownames(inertieC$col.rel)[nameVar]
+
+# [1] "degur.ville"                            "degur.rural"                           
+# [3] "distance_ville_proche"                  "mairie_distance"                       
+# [5] "atm_distance"                           "hopital_distance"                      
+# [7] "pharmacie_distance"                     "arret_bus_distance_km"                 
+# [9] "gare_distance_km"                       "medecin_clinique_hors_camp_distance_km"
+# [11] "dentiste_hors_camp_distance_km"         "ecole_hors_camp_distance_km"           
+# [13] "poste_hors_camp_distance_km"            "distance_124_aeroport"                 
+# [15] "distance_122_reseaux_routiers"          "ecart_densites"
+
+
+```
+
+##### Selection des variables bien représentée dans le plan 1 et 2 
+
+(somme de col.rel \> 80%) et des variables qui contribuent aussi pour plus de 50% aux axes 1 OU axes 2
+
+```{r}
+## 
+# Pas fait le 10 janvier sur AFCM avec truncature des valeurs extrêmes
+nameVar <- grep('TRUE', (abs(inertieC$col.rel[, 1]) + abs(inertieC$col.rel[, 2])) > 1*(inertie[1] + inertie[2]) & (abs(inertieC$col.abs[,1]) > inertie[1]*0.5 | abs(inertieC$col.abs[,2]) > inertie[2]*0.5))
+#[1]    14 18 27 33 48 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67
+rownames(inertieC$col.rel)[nameVar]
+#nameVar <- c(14,18)
+```
+
+##### Graphique biplot
+
+prend la sélection des variables nameVar en paramètre
+
+```{r}
+axe1 <- 1
+axe2 <- 2
+individus <- afcm$li
+variables <- afcm$co
+index <- nameVar 
+xmin <- min(c(individus[, axe1],variables[index ,axe1]))
+xmax <- max(c(individus[, axe1],variables[index ,axe1]))
+factorX = ( max(c(individus[, axe1])) - min(c(individus[, axe1])) ) / ( max(variables[index ,axe1]) - min(variables[index ,axe1]) )
+xmax <- max(abs(xmin), xmax)+1.5
+ymin <- min(c(individus[, axe2],variables[index ,axe2]))
+ymax <- max(c(individus[, axe2],variables[index ,axe2]))
+ymax <- max(abs(ymin), ymax)+1.5
+factorY = ( max(c(individus[, axe2])) - min(c(individus[, axe2])) ) / ( max(variables[index ,axe2]) - min(variables[index ,axe2]) )
+
+theme <- "bien représentées "
+
+#setEPS()
+#postscript("./figuresAFCM/biplot_12.eps")
+
+par(mar=c(2, 2, 3, 2)) 
+plot(individus[,axe1],individus[,axe2],
+     xlab=paste("Axe", axe1),ylab=paste("Axe", axe2),
+     col=6,  
+     xlim=c(xmin, xmax), ylim=c(ymin, ymax))
+title(paste("Individus (tous) et variables", theme, "\n sur axes", axe1,"/", axe2), 
+      cex.main = 1,   font.main= 4, col.main= "blue" )#, outer = TRUE
+points(variables[index ,axe1],variables[index ,axe2],col=1 ,pch=7)
+s <- seq(length(variables[index ,axe1]))  
+arrows(0, 0, variables[index ,axe1][s]*factorX, variables[index ,axe2][s]*factorY, col = 1, length=0.1)
+text(variables[index ,axe1]*factorX, variables[index ,axe2]*factorY, row.names(variables[index ,]), cex=0.8, pos=4, col=1, font=2)
+
+dev.copy(png,'./figuresAFCM/biplot_12_22jan2025.png')
+dev.off()
+
+#graphics.off()
+
+```
+
+Le simple et rustique biplot
+
+```{r}
+nameVar # filtrage de quelques variables qui tirent les axes
+
+## Le simple et rustique biplot
+biplot(afcm$li[,1:2], afcm$co[nameVar , 1:2], xlab="Axe1", ylab="Axe2", cex=0.7, xlim=c(xmin, xmax), ylim=c(ymin, ymax))
+dev.copy(png,'./figuresAFCM/biplot.png')
+dev.off()
+
+```
+
+# Classification (sur AFCM)
+
+```{r}
+#Coordonn?es des individus sur les 4 axes
+round(afcm$li, 2)
+names(afcm$li)
+
+library(cluster)
+classif <- agnes(afcm$li, method = "ward", metric = "euclidean")
+
+# Arbre de la classification
+par(mar=c(2, 2, 3, 2)) 
+plot(classif, which=2, main = "")
+title("Arbre de classification des individus, extraits de l'AFCM", 
+      cex.main = 1,   font.main= 4, col.main= "blue")
+dev.copy(png,'./figuresAFCM/arbre-classif_postAFCM_27fev2025.png')
+dev.off()
+
+#Choisir k est arbitraire 
+membersClus4 <- cutree(classif, k = 4)
+write.table(membersClus4, "./classesAFCM_4_27fev2025.csv", row.names = F)
+
+#membersClus <- cutree(classif, k = 3)
+#write.table(membersClus, "./classesAFCM_3_27fev2025.csv", row.names = F)
+
+membersClus2 <- cutree(classif, k = 2)
+write.table(membersClus, "./classesAFCM_2_27fev2025.csv", row.names = F)
+
+membersClus2 <- cutree(classif, k = 5)
+write.table(membersClus, "./classesAFCM_5_27fev2025.csv", row.names = F)
+
+```
+
+# Analyser la classification
+
+```{r}
+## Renumérotation
+
+membersClusCopy  <- membersClus4
+for (i in 1:length(membersClusCopy)) {
+  if (membersClusCopy[i] == 2 ) { 
+    membersClus4[i] <- 11 #GROSSE VILLE
+  }
+  if (membersClusCopy[i] == 3 ) { 
+    membersClus4[i] <- 12 #PETITE VILLE
+  }
+  if (membersClusCopy[i] == 1 ) { 
+    membersClus4[i] <- 21 #RURAL
+  }
+  if (membersClusCopy[i] == 4 ) { 4
+    membersClus4[i] <- 22 #RURAL très isolé
+  }
+}
+
+
+CAH_Camps <- cbind(camps, membersClus2)
+CAH_Camps <- cbind(CAH_Camps, membersClus4)
+
+colnames(CAH_Camps)[grep("membersClus4", colnames(CAH_Camps) )] <- "membersClus"
+
+
+
+CAH_Camps |> 
+  filter ( iso3=='BIH')  |> 
+  select(unique_id, nom_unique, iso3, membersClus, degurba, clc_majoritaire_13_mixte, distance_ville_proche, ville_proche_population, ecart_densites)
+
+
+
+
+write.table(CAH_Camps, "./CAHcamps8_27-02-2025.csv", sep = ";" , dec = ".", row.names = FALSE)
+
+
+```
+
+### Moyennes par classes
+
+##### Résumé sur les numériques par groupe
+
+```{r}
+coeffVar <- function(x) {
+  return (sd(x)/mean(x));
+}
+
+CAH_Camps |>
+  select(cols,membersClus, membersClus2)|>
+  group_by(membersClus) |>
+  summarise(across(where(is.numeric), mean))
+
+  #summarise(across(where(is.numeric), list(~ mean(.x, na.rm = TRUE), ~ median(.x, na.rm = TRUE))))
+  #summarise(across(where(is.numeric), list(mean, coeffVar)))
+
+```
+
+##### mode majoritaire par groupe
+
+```{r}
+library(stringr) #Remplacements de valeurs dans les chaines de caractères avec ${}
+
+Mode <- function(x) {
+  mode_maj = names(which.max(table(x)));
+  prop_maj = round(max(table(x))/length(x)*100, 0);
+  str_interp("${mode_maj} - ${prop_maj}%")
+}
+# 
+# CAH_Camps |>
+#    group_by(membersClus) |>
+#    summarise(across(where(is.factor), Mode))
+
+resumeFct <- function(x) {
+  value <- length(x); #x[1]si chaine de charactères, on prend la première
+  if (is.factor(x)) {
+      mode_maj = names(which.max(table(x)));
+      prop_maj = round(max(table(x))/length(x)*100, 0);
+      value <- str_interp("${mode_maj} - ${prop_maj}%")
+  } else if (is.numeric(x)) {
+    m = round(mean(x, na.rm=T ), 3) 
+    dispersion = round(sd(x, na.rm=T ) / m * 100, 0)
+    #value <- str_interp("${m} - ${dispersion}%")
+    #La médiane me semble bien. 
+    value <- round(median(x, na.rm=T ), 2) 
+  }
+  return(value);
+}
+
+#CAH_Camps$membersClus2 <- recode(CAH_Camps$membersClus2, `1` = '2 - rural', `2` = '1 - urbain')
+
+CAH_Camps <- CAH_Camps |>
+  mutate(membersClus2 = as.factor(membersClus2)) |>
+  mutate(recode(membersClus2, `1` = '2 - rural', `2` = '1 - urbain'))
+
+
+resume <- CAH_Camps |>
+   group_by(membersClus) |>
+   summarise_all( resumeFct)
+
+write.table(resume, "./CAHcamps8_27-02-2025_resume.csv", sep = ";" , dec = ".", row.names = FALSE)
+
+resume
+```
+
+### Cartographie des classes
+
+Lire les fichiers géographiques
+
+-   Contours des pays
+
+-   Limites de l'espace schengen : C:\Travail\MIGRINTER\Labo\Louis\_Fernier\Analyse\_camp_Nov2024\Carto\\16.01.2025\Espace\_Schengen_ligne
+
+-   Les camps comme des points
+
+```{r}
+library(mapsf)
+
+```
