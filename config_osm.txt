@@ -1,0 +1,112 @@
+##
+## Auteur : Christine Plumejeaud, 16 février 2022
+## FICHIER DE CONFIGURATION pour l'import de shapes dans la base kurdistan
+## A utiliser avec : feed_osm.py
+##
+
+#################################################################################################################
+##
+## Coordonnées de la base postgres dans laquelle on importe les données
+##
+#################################################################################################################
+
+
+[base]
+host=localhost
+#134.158.33.178
+port=5432
+#port=8004
+dbname=osm
+schema=clc
+#schema=natura2000
+
+superuser=postgres
+superuserpass=******
+
+user=postgres
+password=******
+userReader=qgis_reader
+
+
+
+#################################################################################################################
+##
+## SSH config
+##
+#################################################################################################################
+
+[ssh]
+server=cchum-kvm-mapuce.in2p3.fr
+port=22
+postgres_server=localhost
+postgres_port=5432
+
+## User that is logging 
+user=nelly
+## Path to your openSSH private key (RSA) for connecting on SSH server - SHOULD NEVER be given
+#ppk=C:\Users\Christine\.ssh\id_dsa.pub
+ppk=C:\Users\cplume01\Travail\CNRS\Travail_LIENSs\Projets\Pierre-Guy_Sauriau\Dev\id_dsa_com_psauriau.pub
+## Pass phrase to open your openSSH private key (RSA) for connecting on SSH server - SHOULD NEVER be given
+passwd=++++++++
+# Note : port=8002 = base.port et postgres_server = localhost = base.host
+sship = '134.158.33.178'
+sshuser = 'nelly'
+sshpassword = '++++++++'
+
+
+#################################################################################################################
+##
+## Fichiers de log
+## https://docs.python.org/2/library/logging.html
+## levels
+## ERROR	40
+## WARNING	30
+## INFO	20
+## DEBUG	10
+##
+#################################################################################################################
+
+[log]
+# Fichier de log pour garder une trace des opérations réalisées (il écrase le précédent si il porte le même nom)
+file=/home/plumegeo/camps_migrants/logs/logs_OSM_05jan2025-guyane.txt
+level=20
+
+#################################################################################################################
+##
+## Emplacement des fichiers
+##
+#################################################################################################################
+
+[files]
+## Chemins vers les fichiers à importer
+
+#dans schema=clc
+#path2originals=/data/clc/u2018_clc2018_v2020_20u1_fgdb/gdb/u2018_clc2018_v2020_20u1_fgdb/DATA/
+#withRecursive=False
+#epsg=
+#32638
+
+#dans schema=natura2000
+#path2originals=/data/natura2000/laea/gdb/N2K_2018_3035_v010_fgdb/Data/
+#withRecursive=False
+#epsg=
+
+## le 2.10
+path2originals=/data/clc/u2018_clc2018_v2020_20u1_fgdb/gdb/u2018_clc2018_v2020_20u1_fgdb/DATA/French_DOMs/
+withRecursive=False
+epsg=
+
+
+
+#################################################################################################################
+##
+## HTTP config
+##
+#################################################################################################################
+
+[proxy]
+## At Poitiers, you have to use proxy (True), else not (False)
+need=False
+## Adresse du proxy : IP:port
+#http_proxy=10.1.30.18:3128
+http_proxy=cache.univ-poitiers.fr:3128
