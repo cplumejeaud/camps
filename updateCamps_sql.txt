@@ -1,0 +1,562 @@
+-----------------------------------------------------------------------------------------------------------------
+-- Auteur : Christine PLUMEJEAUD-PERREAU, UMR 7301 Migrinter
+-- Date : 14/10/2024
+-- Projet : thèse de Louis Fernier
+-- Faire exécuter les requêtes SQL de ce script par un programme python (camps.ipynb)
+-- (qui prennent en paramètre une liste d'identifiants de camps)
+-- mise à jour des géométries, appartenance et distance aux CLC, distance aux villes et degré d'urbanisation (définition harmonisée Eurostat)
+-----------------------------------------------------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------------------------------------------------
+-- géometries
+-----------------------------------------------------------------------------------------------------------------
+update camps.camps6 c set geom = st_setsrid(st_makepoint(camp_longitude, camp_latitude), 4326) where camp_latitude is not null and geom is null and unique_id in ({0});
+
+update camps.camps6 c set point3857 = st_setsrid(st_transform(geom, 3857), 3857) where point3857 is null and unique_id in ({0});
+
+update camps.camps6 c set point3035 = st_setsrid(st_transform(geom, 3035), 3035) where point3035 is null and unique_id in ({0});
+
+update camps.camps6  set point4258 = st_setsrid(st_transform(geom, 4258), 4258) where point4258 is null and unique_id in ({0});
+
+-----------------------------------------------------------------------------------------------------------------
+-- CLC : cas général
+-----------------------------------------------------------------------------------------------------------------
+
+update camps.camps6 c set CLC_majoritaire_3 = clc.code_18::int, CLC_majoritaire_2 = substring(clc.code_18 for 2)::int
+from clc.u2018_clc2018_v2020_20u1 clc
+where st_contains(clc.shape, c.point3035) and unique_id in ({0});
+
+-- CLC : French DOM
+ 
+update camps.camps6 c set CLC_majoritaire_3 = clc.code_18::int, CLC_majoritaire_2 = substring(clc.code_18 for 2)::int
+from clc.u2018_clc2018_v2020_20u1_fr_glp clc
+where CLC_majoritaire_3 is null and geom is not null and pays = 'France' and unique_id in ({0})
+and st_contains(clc.shape, st_setsrid(st_transform(c.geom, 4559), 4559));
+-- Guadeloupe
+
+update camps.camps6 c set CLC_majoritaire_3 = clc.code_18::int, CLC_majoritaire_2 = substring(clc.code_18 for 2)::int
+from clc.u2018_clc2018_v2020_20u1_fr_guf clc
+where CLC_majoritaire_3 is null and geom is not null and pays = 'France' and unique_id in ({0})
+and st_contains(clc.shape, st_setsrid(st_transform(c.geom, 2972), 2972));
+-- guyanne
+
+update camps.camps6 c set CLC_majoritaire_3 = clc.code_18::int, CLC_majoritaire_2 = substring(clc.code_18 for 2)::int
+from clc.u2018_clc2018_v2020_20u1_fr_mtq clc
+where CLC_majoritaire_3 is null and geom is not null and pays = 'France' and unique_id in ({0})
+and st_contains(clc.shape, st_setsrid(st_transform(c.geom, 4559), 4559));
+-- martinique
+
+update camps.camps6 c set CLC_majoritaire_3 = clc.code_18::int, CLC_majoritaire_2 = substring(clc.code_18 for 2)::int
+from clc.u2018_clc2018_v2020_20u1_fr_myt clc
+where CLC_majoritaire_3 is null and geom is not null and pays = 'France' and unique_id in ({0})
+and st_contains(clc.shape, st_setsrid(st_transform(c.geom, 4471), 4471));
+-- mayotte
+
+update camps.camps6 c set CLC_majoritaire_3 = clc.code_18::int, CLC_majoritaire_2 = substring(clc.code_18 for 2)::int
+from clc.u2018_clc2018_v2020_20u1_fr_reu clc
+where CLC_majoritaire_3 is null and geom is not null and pays = 'France'  and unique_id in ({0})
+and st_contains(clc.shape, st_setsrid(st_transform(c.geom, 2975), 2975));
+-- réunion
+
+-- mettre à jour la distance aux CLC (Cas général)
+
+update camps.camps6  c set distance_124_aeroport = round(k.min_d/1000)
+from (
+	select c.unique_id, min(st_distance(c.point3035, clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1 clc
+	where clc.code_18 = '124' and unique_id in ({0})
+	group by c.unique_id
+) as k where k.unique_id = c.unique_id;
+-- 1791 - 12 s
+
+
+
+update camps.camps6  c set distance_13_mines_decharges_chantiers = round(k.min_d/1000)
+from (
+	select c.unique_id, min(st_distance(c.point3035, clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1 clc
+	where clc.code_18 like '13%' and unique_id in ({0})
+	group by c.unique_id
+) as k where k.unique_id = c.unique_id;
+-- 1791 1.16 min 
+
+
+
+update camps.camps6  c set distance_123_zones_portuaires = round(k.min_d/1000)
+from (
+	select c.unique_id, min(st_distance(c.point3035, clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1 clc
+	where clc.code_18 like '123' and unique_id in ({0})
+	group by c.unique_id
+) as k where k.unique_id = c.unique_id;
+-- 1791  11s 
+
+
+update camps.camps6  c set distance_122_reseaux_routiers = round(k.min_d/1000)
+from (
+	select c.unique_id, min(st_distance(c.point3035, clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1 clc
+	where clc.code_18 like '122' and unique_id in ({0})
+	group by c.unique_id
+) as k where k.unique_id = c.unique_id;
+-- 1791 50s
+
+update camps.camps6  c set distance_41_zones_humides_interieures = round(k.min_d/1000)
+from (
+	select c.unique_id, min(st_distance(c.point3035, clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1 clc
+	where geom is not null and clc.code_18 like '41%' and unique_id in ({0})
+	group by c.unique_id
+) as k where k.unique_id = c.unique_id ;
+
+
+-- Cas général des zones agricoles hétérogènes
+
+insert into camps.distance_CLC_zones_agricoles_heterogenes
+(select pays.adm0_a3 as country, c.unique_id, st_distance(c.point3035, clc.shape) as distance_clc_24
+	from camps.camps6 c, camps.countries pays, clc.u2018_clc2018_v2020_20u1 clc
+	where  unique_id  in ({0})
+	and c.geom is not null and c.iso3 = pays.adm0_a3 and  clc.code_18 like '24%' and (clc.shape && geom3035 )
+);
+
+update camps.camps6  c set distance_24_zones_agricoles_heterogenes = round(k.min_d/1000)
+from (
+	select c.unique_id, min(distance_clc_24) as min_d
+	from camps.distance_CLC_zones_agricoles_heterogenes c
+	where unique_id in ({0})
+	group by c.unique_id) as k 
+where k.unique_id = c.unique_id ;
+
+-- Cas particulier des DOM français
+
+-- distance_124_aeroport
+update camps.camps6  c set distance_124_aeroport = round(k.min_d/1000)
+from (
+select unique_id, min(min_d) as min_d from 
+(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_glp clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '124' 
+	group by c.unique_id
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2972), 2972), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_guf clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '124' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_mtq clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '124' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4471), 4471), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_myt clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '124' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2975), 2975), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_reu clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '124' 
+	group by c.unique_id
+	)
+) as k1 
+group by unique_id  
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+
+-- distance_13_mines_decharges_chantiers
+update camps.camps6  c set distance_13_mines_decharges_chantiers = round(k.min_d/1000)
+from (
+select unique_id, min(min_d) as min_d from 
+(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_glp clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '13%' 
+	group by c.unique_id
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2972), 2972), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_guf clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '13%' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_mtq clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '13%'
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4471), 4471), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_myt clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '13%' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2975), 2975), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_reu clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '13%' 
+	group by c.unique_id
+	)
+) as k1 
+group by unique_id  
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+
+--distance_123_zones_portuaires
+update camps.camps6  c set distance_123_zones_portuaires = round(k.min_d/1000)
+from (
+select unique_id, min(min_d) as min_d from 
+(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_glp clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '123' 
+	group by c.unique_id
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2972), 2972), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_guf clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '123' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_mtq clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '123' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4471), 4471), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_myt clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '123' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2975), 2975), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_reu clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '123' 
+	group by c.unique_id
+	)
+) as k1 
+group by unique_id  
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+
+
+--distance_122_reseaux_routiers
+update camps.camps6  c set distance_122_reseaux_routiers = round(k.min_d/1000)
+from (
+select unique_id, min(min_d) as min_d from 
+(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_glp clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '122' 
+	group by c.unique_id
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2972), 2972), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_guf clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '122' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_mtq clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '122' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4471), 4471), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_myt clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '122' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2975), 2975), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_reu clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 = '122' 
+	group by c.unique_id
+	)
+) as k1 
+group by unique_id  
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+
+-- distance_41_zones_humides_interieures
+
+update camps.camps6  c set distance_41_zones_humides_interieures = round(k.min_d/1000)
+from (
+select unique_id, min(min_d) as min_d from 
+(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_glp clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '41%' 
+	group by c.unique_id
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2972), 2972), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_guf clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '41%' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_mtq clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '41%'
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4471), 4471), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_myt clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '41%' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2975), 2975), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_reu clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '41%' 
+	group by c.unique_id
+	)
+) as k1 
+group by unique_id  
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+
+-- distance_24_zones_agricoles_heterogenes
+
+update camps.camps6  c set distance_24_zones_agricoles_heterogenes = round(k.min_d/1000)
+from (
+select unique_id, min(min_d) as min_d from 
+(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_glp clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '24%' 
+	group by c.unique_id
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2972), 2972), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_guf clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '24%' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4559), 4559), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_mtq clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '24%'
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 4471), 4471), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_myt clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '24%' 
+	group by c.unique_id
+	)
+	union
+	(
+	select c.unique_id, min(st_distance(st_setsrid(st_transform(c.geom, 2975), 2975), clc.shape)) as min_d
+	from camps.camps6 c, clc.u2018_clc2018_v2020_20u1_fr_reu clc
+	where pays = 'France' and (camp_longitude < -5 or camp_longitude > 10) and clc.code_18 like '24%' 
+	group by c.unique_id
+	)
+) as k1 
+group by unique_id  
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+
+-- Mettre en valeur manquante les valeurs aberrantes
+update camps.camps6 c
+set distance_13_mines_decharges_chantiers = null where distance_13_mines_decharges_chantiers > 1000 and c.unique_id  in ({0});
+-- 21
+update camps.camps6 c
+set distance_123_zones_portuaires = null where distance_123_zones_portuaires > 1000 and c.unique_id  in ({0});
+--21
+update camps.camps6 c
+set distance_124_aeroport = null where distance_124_aeroport > 1000 and c.unique_id  in ({0});
+--21
+update camps.camps6 c
+set distance_122_reseaux_routiers = null where distance_122_reseaux_routiers > 1000 and c.unique_id  in ({0});
+-- 36
+update camps.camps6 c
+set distance_24_zones_agricoles_heterogenes = null where distance_24_zones_agricoles_heterogenes > 1000 and c.unique_id  in ({0});
+-- 5
+update camps.camps6 c
+set distance_41_zones_humides_interieures = null where distance_41_zones_humides_interieures > 1000 and c.unique_id  in ({0});
+
+-- demande de Louis du 1/10 : zoomer sur les CLC 11, 12, 13, 14 au niveau 3
+update camps.camps6  set clc_majoritaire_23_mixte = clc_majoritaire_2 where clc_majoritaire_2 not in (11,12,13,14) and unique_id  in ({0});
+
+update camps.camps6  set clc_majoritaire_23_mixte = clc_majoritaire_3 where clc_majoritaire_2  in (11,12,13,14) and unique_id  in ({0});
+
+-- SAGEO25
+-- demande de Louis et Christine du 19/12 pour article sageo : zoomer sur les CLC 11, 12, 13, 14 au niveau 3
+-- alter table camps.camps8 add column clc_majoritaire_13_mixte int;
+update camps.camps8  set clc_majoritaire_13_mixte = substring(clc_majoritaire_2::text for 1)::int where clc_majoritaire_2 not in (11,12,13,14) and unique_id  in ({0});
+-- 246
+update camps.camps8  set clc_majoritaire_13_mixte = clc_majoritaire_3 where clc_majoritaire_2  in (11,12,13,14) and unique_id  in ({0});
+
+
+----------------------------------------------------------------------------------------------------------------------------------------
+-- Distance de Schengen
+----------------------------------------------------------------------------------------------------------------------------------------
+
+update camps.camps6  c set distanceSchengenkm = round(k.min_d/1000)
+from (
+	select c.unique_id, min(st_distance(c.point3857, ne.poly3857)) as min_d
+	from camps.camps6 c, demographie.ne_10m_admin_0_countries ne
+	where ne.Espace_Schengen is true 
+	group by c.unique_id
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+-- 1791
+
+update camps.camps6  c set distanceSchengenkm = round(k.min_d/1000)
+from (
+	select c.unique_id, min(st_distance(c.point3857, st_boundary(ne.poly3857))) as min_d
+	from camps.camps6 c, demographie.ne_10m_admin_0_countries ne
+	where ne.Espace_Schengen is true and c.distanceSchengenkm = 0
+	group by c.unique_id
+) as k where k.unique_id = c.unique_id and c.unique_id  in ({0});
+-- 1285 interne
+
+update camps.camps6  c set eloignementSchengen = 'loin_interne' 
+where distanceSchengenkm > 30 and 
+ 	iso3 in  ('LUX', 'DEU', 'ESP', 'POL', 'FIN', 'HUN', 'EST', 'SWE', 'SVK', 
+	'ITA', 'DNK', 'NOR', 'CZE','CHE', 'BEL' , 'NLD', 'SVN', 'MLT', 'PRT', 
+	'LTU', 'FRA', 'AUT', 'GRC' ) and c.unique_id  in ({0});
+-- 688
+
+update camps.camps6  c set eloignementSchengen = 'proche_interne' 
+where distanceSchengenkm <= 30 and 
+ 	iso3 in  ('LUX', 'DEU', 'ESP', 'POL', 'FIN', 'HUN', 'EST', 'SWE', 'SVK', 
+	'ITA', 'DNK', 'NOR', 'CZE','CHE', 'BEL' , 'NLD', 'SVN', 'MLT', 'PRT', 
+	'LTU', 'FRA', 'AUT', 'GRC' ) and c.unique_id  in ({0});
+-- 610
+
+update camps.camps6  c set eloignementSchengen = 'loin_externe' 
+where distanceSchengenkm > 30 and 
+ 	iso3 not in  ('LUX', 'DEU', 'ESP', 'POL', 'FIN', 'HUN', 'EST', 'SWE', 'SVK', 
+	'ITA', 'DNK', 'NOR', 'CZE','CHE', 'BEL' , 'NLD', 'SVN', 'MLT', 'PRT', 
+	'LTU', 'FRA', 'AUT', 'GRC' ) and c.unique_id  in ({0});
+-- 436
+
+update camps.camps6  c set eloignementSchengen = 'proche_externe' 
+where distanceSchengenkm <= 30 and 
+ 	iso3 not in  ('LUX', 'DEU', 'ESP', 'POL', 'FIN', 'HUN', 'EST', 'SWE', 'SVK', 
+	'ITA', 'DNK', 'NOR', 'CZE','CHE', 'BEL' , 'NLD', 'SVN', 'MLT', 'PRT', 
+	'LTU', 'FRA', 'AUT', 'GRC' ) and c.unique_id  in ({0});
+-- 31
+
+----------------------------------------------------------------------------------------------------------------------------------------
+-- Ville et urbanisation
+----------------------------------------------------------------------------------------------------------------------------------------
+
+update camps.camps6 c set degurba = g.dgurba 
+	from demographie."DGURBA_2018_01M" g
+where st_contains(g.geom, point4258) and unique_id  in ({0});
+
+update camps.camps6 c set horsDBURBA = true
+where degurba is null and geom is not null and pays not in ('France', 'Greece') and unique_id  in ({0});
+
+
+update  camps.camps6 c set pays_population = pm."2019"
+from demographie.population_monde pm 
+where c.iso3 = pm.country_code and unique_id  in ({0});
+
+update  camps.camps6 c set pays_population = w.pop_est 
+from demographie.ne_10m_admin_0_countries w 
+where pays_population is null and (w.name_fr=c.pays or w.adm0_a3_fr=c.iso3) and unique_id  in ({0});
+
+
+update camps.camps6 c set 
+	eurostat_computed_gisco_id = g.nsi_code,
+	eurostat_computed_city_code = g.computed_city_code,
+	eurostat_computed_fua_code = g.computed_fua_code,
+	eurostat_nuts_code_2016 = g.nuts_code,
+	eurostat_nsi_code_2016 = g.nsi_code,
+	eurostat_name_ascii_2016 = g.name_asci,
+	eurostat_pop_2019 = coalesce(pop_2019, coalesce(pop_2018, coalesce(pop_2011, -1)))
+from  demographie."GISCO_LAU_eurostat" g 
+where st_contains(g.geom, c.point3857)  and unique_id  in ({0});
+
+
+update camps.camps6 c set 
+	eurostat_computed_gisco_id = g.nsi_code,
+	eurostat_computed_city_code = g.computed_city_code,
+	eurostat_computed_fua_code = g.computed_fua_code,
+	eurostat_nuts_code_2016 = g.nuts_code,
+	eurostat_nsi_code_2016 = g.nsi_code,
+	eurostat_name_ascii_2016 = g.name_asci,
+	eurostat_pop_2019 = coalesce(pop_2019, coalesce(pop_2018, coalesce(pop_2011, -1)))
+from  demographie."GISCO_LAU_eurostat" g 
+where  st_intersects(g.geom, st_buffer(c.point3857, 1000)) and horsDBURBA is false 
+and unique_id  in ({0}) ;
+
+
+
+----------------------------------------------------------------------------------------------------------------------------------------
+-- Renseigner ville_proche_nom : prendre le nom de la city ou fua sinon
+-- Renseigner ville_proche_population : prendre la population de la city ou de la fua si celle-ci est renseignée
+----------------------------------------------------------------------------------------------------------------------------------------
+
+-- 0 si dans la grande ville (catégorie C des aires_urbaines)
+-- km sinon du camps au coeur de la city la plus proche
+
+
+update camps.camps6 c 
+	set ville_proche_nom = case when position('City of' in au.urau_name) = 0 then au.urau_name else substring(au.urau_name from 9) end,
+	ville_proche_population = au.city_pop2019::float,
+	eurostat_computed_city_code = au.urau_code,
+	distance_ville_proche = 0 
+from demographie.aires_urbaines au 
+where unique_id  in ({0}) and au.urau_catg in ('C', 'K') and st_contains(au.geom, c.point3857);
+
+-- on connait la FUA : si le camps est dedans (et pas dans le coeur de ville), on met distance au centre de la FUA du même code
+
+update camps.camps6 c 
+	set ville_proche_nom = case when position('City of' in au.urau_name) = 0 then au.urau_name else substring(au.urau_name from 9) end,
+	ville_proche_population = au.city_pop2019::float,
+	distance_ville_proche = round(st_distance(c.point3857, st_centroid(au.geom))/1000),
+	eurostat_computed_fua_code = au.urau_code
+from demographie.aires_urbaines au
+where  unique_id  in ({0}) and  au.urau_catg = 'F' and distance_ville_proche<> 0 and st_contains(au.geom, c.point3857)  
+ ;
+
+-- le camps est hors coeur et FUA : prendre la distance minimale au centre de la FUA la plus proche
+
+update camps.camps6  c
+ set ville_proche_nom = case when position('City of' in au.urau_name) = 0 then au.urau_name else substring(au.urau_name from 9) end,
+	ville_proche_population = au.city_pop2019::float,
+	distance_ville_proche = round(st_distance(c.point3857, st_centroid(au.geom))/1000),
+	eurostat_computed_fua_code = au.urau_code
+from demographie.aires_urbaines au, 
+	(select c.unique_id, c.nom,
+	min(round(st_distance(c.point3857, st_centroid(au.geom))/1000)) as dmin
+	from demographie.aires_urbaines au, camps.camps6  c
+	where point3857 is not null and au.urau_catg = 'F' 
+	and distance_ville_proche is null and horsdburba is false 
+	group by unique_id, nom) as k
+where 
+	point3857 is not null and au.urau_catg = 'F' 
+	and distance_ville_proche is null and horsdburba is false  and
+	round(st_distance(c.point3857, st_centroid(au.geom))/1000) = k.dmin
+	and c.unique_id  in ({0})
+	and c.unique_id = k.unique_id 
+ ;
+
+update camps.camps6 set eurostat_pop_2019 = null where eurostat_pop_2019= -1 and unique_id  in ({0});
