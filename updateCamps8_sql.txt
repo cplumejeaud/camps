@@ -379,6 +379,7 @@ group by unique_id
 -- 1791, 3m21s
 
 
+-- Supprimer les aberrations, possibles sur les DOM français par exemple, ou St Martin (210), ou la Nouvelle-Calédonie (202, 196)
 
 update camps.camps8 c
 set distance_13_mines_decharges_chantiers = null where distance_13_mines_decharges_chantiers > 1000;
@@ -397,6 +398,10 @@ set distance_24_zones_agricoles_heterogenes = null where distance_24_zones_agric
 -- 5
 update camps.camps8 c
 set distance_41_zones_humides_interieures = null where distance_41_zones_humides_interieures > 1000;
+
+update camps.camps8 c
+set distance_121_zi_zac = null where distance_121_zi_zac > 1000;
+-- 21
 
 ----------------------------------------------------------------------------------------------------------------------------------------
 -- Distance de Schengen
@@ -452,52 +457,79 @@ where distanceSchengenkm <= 30 and
 ----------------------------------------------------------------------------------------------------------------------------------------
 -- Renseigner ville_proche_nom : prendre le nom de la city ou fua sinon
 -- Renseigner ville_proche_population : prendre la population de la city ou de la fua si celle-ci est renseignée
+-- Pre-requis 1 : la table URAU_RG_100K_2020_3857 a été enrichie avec un attribut computed_pop_2020 correspondant à la somme des populations incluses et connues en 2020 au niveau LAU
+-- Pre-requis 2 : la table URAU_RG_100K_2020_3857 a été enrichie avec un attribut centrecore correspondant au centre administratif de la FUA, connu via la couche URAU_LB_2020_3857.shp
 ----------------------------------------------------------------------------------------------------------------------------------------
 
-update camps.camps8  c  set distance_ville_proche = null; 
 
+-- remettre à 0
+update camps.camps8  c  set distance_ville_proche = null, eurostat_computed_city_code = null, ville_proche_population= null, ville_proche_nom= null;
 
--- 0 si dans la grande ville (catégorie C des aires_urbaines)
--- km sinon du camps au coeur de la city la plus proche
+-- Si le camps appartient à une FUA, alors distance en km du camps au coeur (C) de la ville correspondante (centrecore). 
+-- Parfois, il n'y a pas de coeur C, on a pré-calculé dans centrecore le coeur de K (9 cas dont Athènes, Londres)
+-- Parfois, il n'y a pas de coeur ni C ni K pour cette FUA (3 cas en Allemagne - DE038L1,DE083L1,DE084L1) : on a pris pour centrecore la valeur de centre F, qui est en fait le centroid de la FUA 
+-- NB1 : les FUA sont absentes de Serbia, Albania, Kosovo, Montenegro, Macedonia et Bosnie
+-- NB2 : en Bosnie (BIH) les calculs ont été faits à la main, car cette perspective complète l'enquête qualitative qui y est menée
 
 
 update camps.camps8  c 
 	set ville_proche_nom = case when position('City of' in au.urau_name) = 0 then au.urau_name else substring(au.urau_name from 9) end,
-	ville_proche_population = au.city_pop2019::float,
+	ville_proche_population = au.computed_pop_2020::float,
 	eurostat_computed_city_code = au.urau_code,
-	distance_ville_proche = 0 
-from demographie.aires_urbaines au 
-where au.urau_catg in ('C', 'K') and st_contains(au.geom, c.point3857);
+	distance_ville_proche = round(st_distance(c.point3857, centrecore)::numeric/1000, 3) 
+from demographie.URAU_RG_100K_2020_3857 au 
+where iso3 not in ('BIH', 'MNE', 'UNK', 'SRB', 'MKD', 'ALB')
+and au.urau_catg in ('F') and st_contains(au.wkb_geometry, c.point3857);
+-- 872
 
--- on connait la FUA : si le camps est dedans (et pas dans le coeur de ville), on met distance au centre de la FUA du même code
-
-update camps.camps8  c 
-	set ville_proche_nom = case when position('City of' in au.urau_name) = 0 then au.urau_name else substring(au.urau_name from 9) end,
-	ville_proche_population = au.city_pop2019::float,
-	distance_ville_proche = round(st_distance(c.point3857, st_centroid(au.geom))::numeric/1000, 3),
-	eurostat_computed_fua_code = au.urau_code
-from demographie.aires_urbaines au
-where    au.urau_catg = 'F' and distance_ville_proche<> 0 and st_contains(au.geom, c.point3857)  
- ;
-
--- le camps est hors coeur et FUA : prendre la distance minimale au centre de la FUA la plus proche
+-- le camps est hors FUA : prendre la distance minimale au centre de la FUA la plus proche
 
 update camps.camps8   c
  set ville_proche_nom = case when position('City of' in au.urau_name) = 0 then au.urau_name else substring(au.urau_name from 9) end,
-	ville_proche_population = au.city_pop2019::float,
-	distance_ville_proche = round(st_distance(c.point3857, st_centroid(au.geom))::numeric/1000, 3),
+	ville_proche_population = au.computed_pop_2020::float,
+	distance_ville_proche = round(st_distance(c.point3857, centrecore)::numeric/1000, 3),
 	eurostat_computed_fua_code = au.urau_code
-from demographie.aires_urbaines au, 
+from demographie.URAU_RG_100K_2020_3857 au, 
 	(select c.unique_id, c.nom,
-	min(round(st_distance(c.point3857, st_centroid(au.geom))::numeric/1000, 3)) as dmin
-	from demographie.aires_urbaines au, camps.camps8   c
+	min(round(st_distance(c.point3857, centrecore)::numeric/1000, 3)) as dmin
+	from demographie.URAU_RG_100K_2020_3857 au, camps.camps8   c
 	where point3857 is not null and au.urau_catg = 'F' 
-	and distance_ville_proche is null and horsdburba is false 
+	and distance_ville_proche is null 
+	and iso3 not in ('BIH', 'MNE', 'UNK', 'SRB', 'MKD', 'ALB')
 	group by unique_id, nom) as k
 where 
 	point3857 is not null and au.urau_catg = 'F' 
-	and distance_ville_proche is null and horsdburba is false  and
-	round(st_distance(c.point3857, st_centroid(au.geom))::numeric/1000, 3) = k.dmin
+	and distance_ville_proche is null 
+	and iso3 not in ('BIH', 'MNE', 'UNK', 'SRB', 'MKD', 'ALB')
+	and round(st_distance(c.point3857, centrecore)::numeric/1000, 3) = k.dmin
 	and c.unique_id = k.unique_id 
  ;
+
+ -- et remettre à null celle des pays où les FUA sont absentes
+ 
+update camps.camps8 set ville_proche_nom = null,
+	ville_proche_population = null,
+	distance_ville_proche = null,
+	eurostat_computed_fua_code = null 
+where pays in ('Moldova','Western Sahara','Belarus', 'Lebanon','Georgia', 'Turkey', 'Ukraine', 'Tunisia', 'Morocco', 'Mauritania', 'Libyan Arab Jamahiriya', 'Jordan', 'Israel', 'Egypt', 'Azerbaijan');
+-- 309 
+
+update camps.camps8 set ville_proche_nom = null,
+	ville_proche_population = null,
+	distance_ville_proche = null,
+	eurostat_computed_fua_code = null 
+where unique_id = '865' and nom_court = 'Curaçao Detention Facility';
+-- 1
+
+-- reprendre les distances calculées à la main pour la Bosnie, 
+
+update camps.camps8 c8  set distance_ville_proche = c7.distance_ville_proche, 
+ville_proche_population=c7.ville_proche_population, ville_proche_nom=c7.ville_proche_nom
+from camps.camps7 c7
+where c7.iso3 in ('BIH') and c8.unique_id = c7.unique_id;
+-- 14
+
+-- Correction d'une erreur de nommage manifeste
+update camps.camps8 c8 set ville_proche_nom = 'FUA of Paris' where ville_proche_nom='he Greater City of Paris';
+
 
