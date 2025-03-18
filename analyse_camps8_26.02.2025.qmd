@@ -26,7 +26,7 @@ R.version #version.string R version 4.2.1 (2022-06-23 ucrt)
 library(tidyverse)
 library(survival)
 library(hms)
-library(here)
+#library(here)
 library(scales)
 library(labelled) #dur
 
@@ -96,7 +96,7 @@ data <- dbGetQuery(con, paste(attributes, clause))
 ##### sauvegarde
 
 ```{r}
-write.table(data, "./camps8_27-02-2025_data.csv", sep = ";", row.names=F)
+write.table(data, "./camps8_18-03-2025_data.csv", sep = ";", row.names=F)
 
 ```
 
@@ -146,7 +146,7 @@ etiq_clc_mixte = c(
  
 etiq_deg_urba=c("ville", "banlieue", "rural") 
 
-q <- "select distinct iso3, pays from camps.camps7"
+q <- "select distinct iso3, pays from camps.camps8"
 flags <- dbGetQuery(con, q)
 
 test <- levels(camps$iso3)
@@ -188,7 +188,7 @@ camps |> select(infrastructure_norm) |> unique()
 #camps$infrastructure_norm <- fct_na_value_to_level(camps$infrastructure_norm, "inconnu") #corrigé dans la BDD
 #camps$infrastructure_avant_conversion <- fct_na_value_to_level(camps$infrastructure_avant_conversion, "pas de conversion")   #corrigé dans la BDD
 
-write.table(camps, "./camps8_27-02-2025.csv", sep = "\t", row.names=F)
+write.table(camps, "./camps8_28-03-2025.csv", sep = "\t", row.names=F)
 ```
 
 ## Traitement des valeurs manquantes
@@ -294,7 +294,7 @@ for (i in 1:length(cols)) {
 ##### Sauver pour Louis
 
 ```{r}
-write.table(camps, "./camps8_27-02-2025-sansNAniOUTLIERS.csv", sep = ";", row.names = FALSE)
+write.table(camps, "./camps8_18-03-2025-sansNAniOUTLIERS.csv", sep = ";", row.names = FALSE)
 
 ```
 
@@ -303,7 +303,7 @@ write.table(camps, "./camps8_27-02-2025-sansNAniOUTLIERS.csv", sep = ";", row.na
 ##### lire les données préparées au cas où
 
 ```{r}
-camps<- read.delim("./camps8_27-02-2025-sansNAniOUTLIERS.csv", header = TRUE, sep = "\t", encoding="UTF8", stringsAsFactors = TRUE)
+camps<- read.delim("./camps8_18-03-2025-sansNAniOUTLIERS.csv", header = TRUE, sep = "\t", encoding="UTF8", stringsAsFactors = TRUE)
 
 ```
 
@@ -311,7 +311,7 @@ camps<- read.delim("./camps8_27-02-2025-sansNAniOUTLIERS.csv", header = TRUE, se
 
 ##### Retirer les données qui ne vont pas dans l'AFCM
 
--   unique_id nom camp_latitude camp_longitude type_camp iso3
+-   unique_id nom camp_latitude camp_longitude type_camp iso3 prison
 
 -   eloignementschengen, distanceschengenkm
 
@@ -378,23 +378,23 @@ afcm$eig
 
 ## Inertie (ou variance expliquée associée à chaque axe)
 inertie <- afcm$eig/sum(afcm$eig) * 100
-#[1] 23.6493928  7.2261023  4.3931135  4.1956861  ....
+#[1] 23.6199808  6.9854552  4.3195789  4.2120963  3.5126963  ....
 # 
 ## Eboulis des valeurs propres
 #dev.off()
 barplot( inertie[inertie > 1] , ylab = "% d'inertie", names.arg = round(inertie[inertie > 1], 2))
 title("Eboulis des valeurs propres en %")
-dev.copy(png,'./figuresAFCM/eboulis_afcm_22jan2025.png')
+dev.copy(png,'./figuresAFCM/eboulis_afcm.png')
 dev.off()
 
 ## Variance cumulée expliquée
 #dev.off()
 inertie_cumulee <- round(cumsum(100 * afcm$eig/sum(afcm$eig)), 2)
-# 23.14  30.55  35.05  39.03  42.69  46.12  49.45  52.61
+# 23.62  30.61  34.93  39.14  42.65  46.09  49.33  52.44
 
 ## Graphique montrant la variance cumulée exploiquée
 barplot(inertie_cumulee , main="Pourcentage d'inertie cumulée")
-dev.copy(png,'./figuresAFCM/inertie_afcm_22jan2025.png')
+dev.copy(png,'./figuresAFCM/inertie_afcm.png')
 dev.off()
 
 ```
@@ -467,7 +467,7 @@ par(
 dotchart(filter1[, 1], labels=row.names(filter1), cex=0.9, offset = 1/15)
 title("Répartition des modalités sur l'axe 1", cex.main = 1,   font.main= 4, col.main= "blue" )
 #, outer = TRUE
-dev.copy(png,'./figuresAFCM/axe1_22jan2025.png')
+dev.copy(png,'./figuresAFCM/axe1.png')
 dev.off()
 
 # L'axe 1 oppose les camps dans les villes proches des réseaux routiers et avec des densités locales très fortes aux camps 
@@ -491,7 +491,7 @@ filter2 <- sortedaxe2[sortedaxe2$Comp2 < y[2]   | sortedaxe2$Comp2 > y[3],  ]
 par(mar = c(2, 1, 2, 2), xaxs = "i",   yaxs = "i", cex.axis = 1, cex.lab  = 1)
 dotchart(filter2[, 2], labels=row.names(filter2), cex=0.9, offset = 1/15)
 title("Répartition des modalités sur l'axe 2", cex.main = 1,   font.main= 4, col.main= "blue" )
-dev.copy(png,'./figuresAFCM/axe2_22jan2025.png')
+dev.copy(png,'./figuresAFCM/axe2.png')
 dev.off()
 ```
 
@@ -501,13 +501,15 @@ axe 1 et axe 2 côte à côte
 ## Les deux cote à cote
 # fin.width=12, fin.height=4 , offset=0.2
 #dev.off()
-op <- par(mfrow=c(1,2), mar = c(3, 0.5, 2, 0.3), 
+#mar = c(3, 0.5, 2, 0.3)
+taille_police = 1.3
+op <- par(mfrow=c(1,2), mar = c(3, 0.5, 2, 1), 
           xaxs = "i",   yaxs = "i", cex.axis = 1, cex.lab  = 1)
-dotchart(filter1[, 1], labels=row.names(filter1), cex=1.2,  pt.cex=1.1)
-title("Répartition des modalités sur l'axe 1", cex.main = 1, font.main= 4, col.main= "blue" )
-dotchart(filter2[, 2], labels=row.names(filter2), cex=1.2,  pt.cex=1.1)
-title("Répartition des modalités sur l'axe 2", cex.main = 1,   font.main= 4, col.main= "blue" )
-dev.copy(png,'./figuresAFCM/axe1-et-2_22jan2025.png', width=1000, heigh=600)
+dotchart(filter1[, 1], labels=row.names(filter1), cex=taille_police,  pt.cex=1.1)
+title("Répartition des modalités sur l'axe 1", cex.main = taille_police, font.main= 4, col.main= "blue" )
+dotchart(filter2[, 2], labels=row.names(filter2), cex=taille_police,  pt.cex=1.1)
+title("Répartition des modalités sur l'axe 2", cex.main = taille_police,   font.main= 4, col.main= "blue" )
+dev.copy(png,'./figuresAFCM/axe1-et-2.png', width=1200, height=600)
 dev.off()
 
 ```
@@ -523,8 +525,8 @@ inertieC$col.rel/100 #qualité
 
 ### Inertie totale
 inertie <- afcm$eig/sum(afcm$eig)*100
-#[1]  23.1423764  7.4095770 
-## Qualité du plan 1/2 :  23.1423764  7.4095770 
+#[1]  23.6199808  6.9854552 
+## Qualité du plan 1/2 :  23.6199808  6.9854552 
 ```
 
 ##### Qualité des colonnes
@@ -551,9 +553,11 @@ rownames(inertieC$col.rel)[nameVar]
 
 ```
 
-##### Selection des variables bien représentée dans le plan 1 et 2 
+##### Selection des variables bien représentée dans le plan 1 et 2
 
 (somme de col.rel \> 80%) et des variables qui contribuent aussi pour plus de 50% aux axes 1 OU axes 2
+
+Etape non obligatoire.
 
 ```{r}
 ## 
@@ -600,7 +604,7 @@ s <- seq(length(variables[index ,axe1]))
 arrows(0, 0, variables[index ,axe1][s]*factorX, variables[index ,axe2][s]*factorY, col = 1, length=0.1)
 text(variables[index ,axe1]*factorX, variables[index ,axe2]*factorY, row.names(variables[index ,]), cex=0.8, pos=4, col=1, font=2)
 
-dev.copy(png,'./figuresAFCM/biplot_12_22jan2025.png')
+dev.copy(png,'./figuresAFCM/biplot_12.png')
 dev.off()
 
 #graphics.off()
@@ -634,51 +638,52 @@ par(mar=c(2, 2, 3, 2))
 plot(classif, which=2, main = "")
 title("Arbre de classification des individus, extraits de l'AFCM", 
       cex.main = 1,   font.main= 4, col.main= "blue")
-dev.copy(png,'./figuresAFCM/arbre-classif_postAFCM_27fev2025.png')
+dev.copy(png,'./figuresAFCM/arbre-classif_postAFCM_18mars2025.png')
 dev.off()
 
 #Choisir k est arbitraire 
 membersClus4 <- cutree(classif, k = 4)
-write.table(membersClus4, "./classesAFCM_4_27fev2025.csv", row.names = F)
+write.table(membersClus4, "./classesAFCM_4_18mars2025.csv", row.names = F)
 
-#membersClus <- cutree(classif, k = 3)
-#write.table(membersClus, "./classesAFCM_3_27fev2025.csv", row.names = F)
+membersClus3 <- cutree(classif, k = 3)
+write.table(membersClus3, "./classesAFCM_3_18mars2025.csv", row.names = F)
 
 membersClus2 <- cutree(classif, k = 2)
-write.table(membersClus, "./classesAFCM_2_27fev2025.csv", row.names = F)
+write.table(membersClus2, "./classesAFCM_2_18mars2025.csv", row.names = F)
 
-membersClus2 <- cutree(classif, k = 5)
-write.table(membersClus, "./classesAFCM_5_27fev2025.csv", row.names = F)
+membersClus5 <- cutree(classif, k = 5)
+write.table(membersClus5, "./classesAFCM_5_18mars2025.csv", row.names = F)
 
 ```
 
 # Analyser la classification
 
+membersClusCopy \<- membersClus4 for (i in 1:length(membersClusCopy)) { if (membersClusCopy\[i\] == 2 ) { membersClus4\[i\] \<- 11 #GROSSE VILLE } if (membersClusCopy\[i\] == 3 ) { membersClus4\[i\] \<- 12 #PETITE VILLE } if (membersClusCopy\[i\] == 1 ) { membersClus4\[i\] \<- 21 #RURAL } if (membersClusCopy\[i\] == 4 ) { 4 membersClus4\[i\] \<- 22 #RURAL très isolé } }
+
 ```{r}
 ## Renumérotation
-
-membersClusCopy  <- membersClus4
-for (i in 1:length(membersClusCopy)) {
-  if (membersClusCopy[i] == 2 ) { 
-    membersClus4[i] <- 11 #GROSSE VILLE
-  }
-  if (membersClusCopy[i] == 3 ) { 
-    membersClus4[i] <- 12 #PETITE VILLE
-  }
-  if (membersClusCopy[i] == 1 ) { 
-    membersClus4[i] <- 21 #RURAL
-  }
-  if (membersClusCopy[i] == 4 ) { 4
-    membersClus4[i] <- 22 #RURAL très isolé
-  }
+membersClusCopy <- membersClus4 
+for (i in 1:length(membersClusCopy)) 
+{ 
+  if (membersClusCopy[i] == 2 ) { membersClus4[i] <- 11 #GROSSE VILLE , dans le Core
+  } 
+  if (membersClusCopy[i] == 3 ) { membersClus4[i] <- 12 #PETITE VILLE / BANLIEUE
+  } 
+  if (membersClusCopy[i] == 1 ) { membersClus4[i] <- 21 #RURAL 
+  } 
+  if (membersClusCopy[i] == 4 ) { membersClus4[i] <- 22 #RURAL très isolé 
+  } 
 }
+```
 
-
+```{r}
 CAH_Camps <- cbind(camps, membersClus2)
+CAH_Camps <- cbind(CAH_Camps, membersClus3)
 CAH_Camps <- cbind(CAH_Camps, membersClus4)
 
-colnames(CAH_Camps)[grep("membersClus4", colnames(CAH_Camps) )] <- "membersClus"
-
+#colnames(CAH_Camps)[grep("membersClus3", colnames(CAH_Camps) )] <- "membersClus"
+#colnames(CAH_Camps)[grep("membersClus", colnames(CAH_Camps) )] <- "membersClus3"
+CAH_Camps$membersClus <- CAH_Camps$membersClus4
 
 
 CAH_Camps |> 
@@ -688,7 +693,7 @@ CAH_Camps |>
 
 
 
-write.table(CAH_Camps, "./CAHcamps8_27-02-2025.csv", sep = ";" , dec = ".", row.names = FALSE)
+write.table(CAH_Camps, "./CAHcamps8_18-03-2025.csv", sep = ";" , dec = ".", row.names = FALSE)
 
 
 ```
@@ -703,7 +708,7 @@ coeffVar <- function(x) {
 }
 
 CAH_Camps |>
-  select(cols,membersClus, membersClus2)|>
+  select(cols,membersClus)|>
   group_by(membersClus) |>
   summarise(across(where(is.numeric), mean))
 
@@ -743,33 +748,207 @@ resumeFct <- function(x) {
   return(value);
 }
 
-#CAH_Camps$membersClus2 <- recode(CAH_Camps$membersClus2, `1` = '2 - rural', `2` = '1 - urbain')
 
 CAH_Camps <- CAH_Camps |>
   mutate(membersClus2 = as.factor(membersClus2)) |>
-  mutate(recode(membersClus2, `1` = '2 - rural', `2` = '1 - urbain'))
+  mutate(membersClus2 = recode(membersClus2, `1` = '2 - rural', `2` = '1 - urbain'))
 
 
 resume <- CAH_Camps |>
    group_by(membersClus) |>
    summarise_all( resumeFct)
 
-write.table(resume, "./CAHcamps8_27-02-2025_resume.csv", sep = ";" , dec = ".", row.names = FALSE)
+write.table(resume, "./CAHcamps8_18-03-2025_resume.csv", sep = ";" , dec = ".", row.names = FALSE)
 
 resume
+```
+
+```{r}
+write.table(CAH_Camps, "./CAHcamps8_18-03-2025.csv", sep = ";" , dec = ".", row.names = FALSE)
+
 ```
 
 ### Cartographie des classes
 
 Lire les fichiers géographiques
 
--   Contours des pays
+-   Contours des pays : D:\Data\natural\_earth_vector\\10m_cultural\\ne_10m_admin_0_countries.shp
 
 -   Limites de l'espace schengen : C:\Travail\MIGRINTER\Labo\Louis\_Fernier\Analyse\_camp_Nov2024\Carto\\16.01.2025\Espace\_Schengen_ligne
 
--   Les camps comme des points
+Les camps comme des points : CAHcamps8_27-02-2025.csv
+
+<https://r-spatial.github.io/sf/reference/st_transform.html>
+
+```{r}
+library(sf)
+#mapcamps <- st_read("./CAHcamps8_28-02-2025.csv", stringsAsFactors = FALSE)
+
+mapcamps <-st_as_sf(CAH_Camps, coords = c("camp_longitude","camp_latitude"),  crs = 4326)
+
+colnames(mapcamps)
+mapcamps <- st_transform(mapcamps, crs=3035)
+
+```
+
+Les camps qui n'ont pas été analysés
+
+```{r}
+
+## Depuis la BDD
+con <- dbConnect(dbDriver("PostgreSQL"), host='localhost', port='5432', dbname='camps_europe', user='postgres', password='postgres')
+
+#st_asewkt(geom), 
+a1 <- "camp_latitude, camp_longitude, type_camp, iso3, prison, degurba "
+a2 <- " clc_majoritaire_13_mixte, eloignementschengen " 
+a3 <- "infrastructure_norm,	infrastructure_avant_conversion,	infrastructure_solidite,	infrastructure_confort"
+a4 <- "pays_population, pays_surfacekm2, ville_proche_population, distance_ville_proche"
+a5 <- "mairie_distance, atm_distance, hopital_distance, pharmacie_distance, arret_bus_distance_km"
+a6 <-  "gare_distance_km, medecin_clinique_hors_camp_distance_km, dentiste_hors_camp_distance_km "
+a7 <- " ecole_hors_camp_distance_km, poste_hors_camp_distance_km"
+a8 <- " distance_13_mines_decharges_chantiers, distance_124_aeroport, distance_123_zones_portuaires, distance_122_reseaux_routiers"
+a9 <- " distance_24_zones_agricoles_heterogenes, distance_41_zones_humides_interieures"
+a10 <- "distance_121_zi_zac, distanceschengenkm "
+a11 <- "eurostat_pop_2019, camps_commune_surfacekm2"
+a12 <- "coalesce(capacite_2023, coalesce(capacite_2022::int, coalesce(capacite_2021, coalesce(capacite_2020, coalesce(capacite_2019, coalesce(capacite_2018, coalesce(capacite_2017::int, null))))))) as capacite"
+a13 <- "clc_majoritaire_2, clc_majoritaire_3,clc_majoritaire_23_mixte"
+
+ 
+attributes <- paste("select unique_id, nom_unique", a1, a2, a13, a3, a4, a5, a6, a7, 
+                    a8, a9, a10, a11, a12, sep=",")
+
+clause <- "from camps.camps8 p where  point3857 is not null and doublon='Non'"
+#and localisation_qualite in ('vérifiée', 'quartier') and actif_dernieres_infos = 'oui' 
+#and derniere_date_info::int>= 2018 order by pays"
+#clc_majoritaire_13_mixte is not null and iso3 != 'UKR  and unique_id not in ('202', '196', '210', '865')
+
+####Lecture
+
+
+touslescamps <- dbGetQuery(con, paste(attributes, clause))
+
+touslescamps <-st_as_sf(touslescamps, coords = c("camp_longitude","camp_latitude"),  crs = 4326)
+
+touslescamps <- st_transform(touslescamps, crs=3035)
+```
+
+Lire les pays
+
+```{r}
+countries <- st_read("D:/Data/natural_earth_vector/10m_cultural/ne_10m_admin_0_countries.shp", stringsAsFactors = FALSE)
+
+countries <- st_transform(countries, crs=3035)
+
+```
+
+Lire les étiquettes des pays (positions refaites manuellement dans Magrit)
+
+```{r}
+filepath <- "C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024/Carto/16.01.2025/v2/etiquettes_ne_10m_pays_v3.geojson"
+countriesLabels <- st_read(filepath, stringsAsFactors = FALSE)
+countriesLabels <- st_transform(countriesLabels, crs=3035)
+
+
+```
+
+Lire l'espace schengen
+
+```{r}
+
+filepath <- "C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024/Carto/16.01.2025/Espace_Schengen_ligne/Espace_Schengen_ligne.shp"
+schengen <- st_read(filepath, stringsAsFactors = FALSE)
+schengen <- st_transform(schengen, crs=3035)
+```
+
+Faire la carte
 
 ```{r}
 library(mapsf)
+
+export = FALSE
+#"bbox":[95.01270592500003,-10.922621351999908,140.97762699400005,5.910101630000042]
+if (export == T) {
+  mf_export(
+    countries |>filter (ADM0_A3 %in% c('TUR', 'ESP', 'IRL', 'DNK', 'EST')),
+    filename = "map.png",
+    width = 1000,
+    height = 700,
+    res = 96,
+    expandBB = rep(0, 4),
+    theme = mf_theme("nevermind", bg = "lightblue1") 
+  )
+} else {
+  mf_theme("nevermind", bg = "lightblue1")
+  # Pays (polygones, fond transparent) - centrer sur Europe
+  mf_map(x = countries|>filter (ADM0_A3 %in% c('TUR', 'ESP', 'IRL', 'DNK', 'EST')), lwd = 0.1, col = NA)
+}
+
+# plot a shadow
+#mf_map(x = countries, lwd = 0.1, col = "grey50", add = TRUE)
+#mf_shadow(countries,  col = "white", cex = 0.5, add = TRUE) 
+
+# Pays (polygones, fond blanc)
+mf_map(x = countries, lwd = 0.5, border = "grey50", col = "white", add = TRUE)
+
+#Tous les camps, même ceux non analysés
+mf_map(x = touslescamps,type = "base", pch = 18, cex = 0.7, col = "black", add = TRUE)
+
+# plot  catégorie des camps analysés
+mf_map(
+  x = mapcamps ,
+  var = "membersClus",
+  type = "typo",
+  pal = c("purple", "pink",  "lightgreen", "darkgreen"),#aquamarine4
+  border = NA,
+  pch = 20,
+  cex = 1, 
+  # val_order = c(
+  #  "urbain 11 - grande ville",
+  #  "urbain 12 - banlieue de ville moyenne",
+  #  "rural 21 ",
+  #  "rural 22 - très isolé"
+  # ),
+  leg_pos = "topleft",
+  leg_adj = c(0, -0.5),
+  leg_title = "Typologie des camps", 
+  add = TRUE
+)
+
+# Ajout de l'espace schengen
+mf_map(
+  x = schengen ,
+  var = "id",
+  type = "typo",
+  pal = c("darkblue", "blue"),
+  lwd = c(2, 0.7),
+  #border = NA,
+  #pch = 20,
+  #lwd = c(1.5, 1),
+  #lty = c(2, 1),
+  val_order = c( 1, 2 ),
+  leg_pos = "topleft",
+  leg_adj = c(0, -10),
+  leg_title = "Espace Schengen (jan. 2025)", 
+  add = TRUE
+)
+# Ajout d'un titre
+mf_title(txt = "Typologie des lieux d'enfermement de migrants")
+# Crédits
+mf_credits("Auteurs : Christine Plumejeaud-Perreau\nSources : Thèse Louis Fernier, 2025",
+           pos = "rightbottom")
+#Etiquettes
+mf_label(
+  x = countriesLabels, # filter(countries,  ADM0_A3 %in% c('TUR', 'ESP', 'IRL', 'DNK', 'BIH', 'UKR') ), #ADM0_DIF == 0
+  var = "ADMIN",
+  cex = .7,
+  col= "black",
+  halo = TRUE,
+  bg = "white",
+  overlap = FALSE,
+  lines = FALSE
+)
+mf_scale(pos = "bottomleft",  crs_units = "m", scale_units = 'km', size=500)
+
+#dev.off()
 
 ```
