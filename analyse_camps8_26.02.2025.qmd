@@ -39,6 +39,7 @@ library(explor)
 
 library(RPostgreSQL)
 library(cluster)#R 4.2.3
+library(Hmisc)#R 4.2.3
 
 # install.packages("cluster", update = TRUE)
 # 
@@ -47,8 +48,11 @@ library(cluster)#R 4.2.3
 # 
 # install.packages("RPostgreSQL", update = TRUE)
 
+install.packages("Hmisc", meslibrairiesR)
+
 setwd("C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024")
 dir.create(file.path(getwd(), './figuresAFCM'))
+dir.create(file.path(getwd(), './figuresSimulation'))
 
 ici <- file.path(getwd())
 #save.image(file=paste(ici,"export_workspace.RData", sep="/")) 
@@ -356,10 +360,29 @@ On garde :
 [21] "ecart_densites" 
 ```
 
+##### Retirer les cada de France si nécessaire
+
+```{r}
+### Filtrer les camps qui s'appellent CADA
+
+camps |> filter(is.na(str_match(camps$nom, pattern='CADA'))) |> 
+      select(nom_unique, iso3) |>
+      nrow()
+#621 à la place de 994 et avec 30 camps de France. 373 camps sont des CADA en France
+
+
+tododf <- camps |> filter(is.na(str_match(camps$nom, pattern='CADA'))) |> 
+                select(all_of(cols))
+
+```
+
 ##### Exécuter l'AFCM avec le package ade4
 
 ```{r}
-row.names(tododf) <- camps$unique_id 
+
+#row.names(tododf) <- camps$unique_id 
+row.names(tododf) <- (camps |> filter(is.na(str_match(camps$nom, pattern='CADA'))))$unique_id 
+
 library(ade4)
 
 #On ne retient que deux axes : nf = 2
@@ -677,7 +700,8 @@ for (i in 1:length(membersClusCopy))
 ```
 
 ```{r}
-CAH_Camps <- cbind(camps, membersClus2)
+campsSansCada <- camps |> filter(is.na(str_match(camps$nom, pattern='CADA')))
+CAH_Camps <- cbind(campsSansCada, membersClus2)
 CAH_Camps <- cbind(CAH_Camps, membersClus3)
 CAH_Camps <- cbind(CAH_Camps, membersClus4)
 
@@ -817,7 +841,7 @@ a13 <- "clc_majoritaire_2, clc_majoritaire_3,clc_majoritaire_23_mixte"
 attributes <- paste("select unique_id, nom_unique", a1, a2, a13, a3, a4, a5, a6, a7, 
                     a8, a9, a10, a11, a12, sep=",")
 
-clause <- "from camps.camps8 p where  point3857 is not null and doublon='Non'"
+clause <- "from camps.camps8 p where  point3857 is not null and doublon='Non' and nom_court not like ('%CADA%')"
 #and localisation_qualite in ('vérifiée', 'quartier') and actif_dernieres_infos = 'oui' 
 #and derniere_date_info::int>= 2018 order by pays"
 #clc_majoritaire_13_mixte is not null and iso3 != 'UKR  and unique_id not in ('202', '196', '210', '865')
@@ -865,7 +889,7 @@ Faire la carte
 ```{r}
 library(mapsf)
 
-export = FALSE
+export = TRUE
 #"bbox":[95.01270592500003,-10.922621351999908,140.97762699400005,5.910101630000042]
 if (export == T) {
   mf_export(
@@ -950,5 +974,821 @@ mf_label(
 mf_scale(pos = "bottomleft",  crs_units = "m", scale_units = 'km', size=500)
 
 #dev.off()
+
+```
+
+# Analyse des caractéristiques de camps simulés
+
+La simulation consiste à placer pour chaque camps plusieurs jumeaux situés à égale distance du coeur de la FUA la plus proche du camps. On utilise pour cela un petit programme Python qui exécute l'insertion de ce point si il tombe dans le même pays que son jumeau. Le calcul du point simulé est fait avec postgis avec cette fonction :
+
+`ST_AsEWKT(ST_Rotate(geom, radians(random()*360), st_transform(centrecore, 4326)))`
+
+<https://postgis.net/docs/ST_Rotate.html>
+
+-   geom est la position (SRID 4326 - WGS84) du camps (statut_camp = 'vrai')
+
+-   `centrecore est la position`(SRID 3857 - WGS84) du centre administratif de la FUA la plus proche (et englobant possiblement la position du camp). Données URAU_LB_2020_3857 et urau_rg_100k_2020_3857 d'Eurostat.
+
+L'image ci dessous représente un résultat de cette simulation :
+
+![Position des camps simulés vers Genève. *Les jumeaux sont de couleurs identiques, et étiquettés en fonction de l'identifiant du vrai camps, qui est entouré d'un cercle blanc. Sur la carte apparaissent en rose les zones urbaines (degurba = 1), les banlieues (degurba = 2), et les zones rurales (degurba = 3). Les centres des FUA sont nommés et détourés comme des cibles.*](images/simulation_camps_FUA_4_Genève_ter.png){fig-align="center"}
+
+L'insertion réussit à positionner aléatoirement dans le périmètre de la FUA au maximum 8 jumeaux du camps, et dont ensuite les caractéristiques sont calculées : degurba, appartenance à CLC majoritaire (2018) et
+
+-   distance aux mines, décharges et chantiers,
+
+-   distance aux zi et zac
+
+-   distance aux aéroports
+
+L'objectif est de vérifier si les camps simulés, à degurba égal (puisque c'est la variable la plus discriminante) présente une distribution très différente pour ces trois distances. Notre hypothèse est que les camps simulés sont plus loin en distance, en surtout pour ce qui concerne degurba = 1 (ville).
+
+#### Lire les données en BDD
+
+```{r}
+
+setwd("C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024")
+dir.create(file.path(getwd(), './figuresSimulation'))
+
+
+## Depuis la BDD
+con <- dbConnect(dbDriver("PostgreSQL"), host='localhost', port='5432', dbname='camps_europe', user='postgres', password='postgres')
+
+#st_asewkt(geom), 
+a1 <- "camp_latitude, camp_longitude, statut_camp, iso3, degurba, FUA "
+a2 <- " ville_proche_nom, ville_proche_population, clc_majoritaire_13_mixte, clc_majoritaire_3 " 
+# a3 <- "infrastructure_norm,	infrastructure_avant_conversion,	infrastructure_solidite,	infrastructure_confort"
+a4 <- "pays_population, pays_surfacekm2, eurostat_pop_2019, camps_commune_surfacekm2"
+#ville_proche_population, distance_ville_proche"
+# a5 <- "mairie_distance, atm_distance, hopital_distance, pharmacie_distance, arret_bus_distance_km"
+# a6 <-  "gare_distance_km, medecin_clinique_hors_camp_distance_km, dentiste_hors_camp_distance_km "
+# a7 <- " ecole_hors_camp_distance_km, poste_hors_camp_distance_km"
+a8 <- " distance_13_mines_decharges_chantiers, distance_124_aeroport, distance_121_zi_zac"
+a9 <- "distance_122_reseaux_routiers, distance_123_zones_portuaires, distance_41_zones_humides_interieures"
+#distance_123_zones_portuaires, distance_122_reseaux_routiers"
+#a9 <- " distance_24_zones_agricoles_heterogenes, distance_41_zones_humides_interieures"
+#a10 <- "distanceschengenkm "
+#a11 <- "eurostat_pop_2019, camps_commune_surfacekm2"
+#a12 <- "coalesce(capacite_2023, coalesce(capacite_2022::int, coalesce(capacite_2021, coalesce#(capacite_2020, coalesce(capacite_2019, coalesce(capacite_2018, coalesce(capacite_2017::int, null))))))) #as capacite"
+a13 <- "clc_majoritaire_2, clc_majoritaire_3,clc_majoritaire_23_mixte"
+
+ 
+attributes <- paste("select unique_id, parent_id, nom_unique", a1, a2, a4, a8, a9, sep=",")
+
+clause <- "from camps.simulation_camps p where clc_majoritaire_3 is not null and degurba is not null "
+
+####Lecture
+
+
+simulation <- dbGetQuery(con, paste(attributes, clause))
+```
+
+#### Conversion des facteurs et les numériques
+
+```{r}
+simulation <- data.frame(simulation) |> 
+  mutate(unique_id = as.character(unique_id) ) |>
+  mutate_at(vars(statut_camp, iso3, degurba, fua, ville_proche_nom ), list(as.factor)) |>
+  mutate_at(vars( clc_majoritaire_13_mixte,  clc_majoritaire_3), list(as.factor)) |>
+  mutate_at(vars(distance_13_mines_decharges_chantiers, distance_124_aeroport, distance_121_zi_zac, distance_122_reseaux_routiers, distance_123_zones_portuaires, distance_41_zones_humides_interieures), list(as.numeric)) |>
+  mutate_at(vars(eurostat_pop_2019, camps_commune_surfacekm2, pays_population, pays_surfacekm2, ville_proche_population), list(as.numeric)) |>
+  mutate(ecart_densites = log10((eurostat_pop_2019 / camps_commune_surfacekm2)/(pays_population / pays_surfacekm2)) ) 
+```
+
+#### Remplacer les valeurs exceptionnelles sur les numériques
+
+Compiler la [Fonction qui remplace les valeurs exceptionnelles par le 95 centile]
+
+##### Nouvelle fonction qui remplace les valeurs exceptionnelles par la valeur NA (manquante)
+
+```{r}
+
+# Fonction qui remplace les valeurs exceptionnelles par la médiane
+replace_outlier2 <- function (vecteur_numeric) {
+  y <- quantile(vecteur_numeric, probs = c(0, 0.05, 0.5, 0.95, 1), type=4, na.rm=T)
+  for (i in 1:length(vecteur_numeric)) {
+    #print(vecteur_numeric[i])
+    if (!is.na(vecteur_numeric[i]) & vecteur_numeric[i] > y[4]) {
+      vecteur_numeric[i] <- NA #y[3] pour médiane
+    }
+  }
+  return(vecteur_numeric)
+}
+```
+
+```{r}
+
+cols <- c("distance_13_mines_decharges_chantiers", "distance_124_aeroport", 
+          "distance_121_zi_zac", "distance_122_reseaux_routiers", "distance_123_zones_portuaires",    "distance_41_zones_humides_interieures", "ecart_densites", "ville_proche_population" )
+
+for (i in 1:length(cols)) {
+  vecteur <- simulation[, (colnames(simulation) %in% cols[i])]
+  #dev.off()
+  par(mar=c(5, 5, 2, 5)) 
+  hist(vecteur, 
+       #breaks = c(0,50, 100,200, 300, 400,500,750,1000), 
+       main = paste("Distribution de ", cols[i]), 
+       xlab=cols[i], 
+       freq = T)
+  dev.copy(png,paste(paste('./figuresSimulation/Exception_distribution_', cols[i], sep= ''), '.png', sep= ''))
+  dev.off()
+}
+
+#Remplacement des valeurs exceptionnelles pour les colonnes choisies (cols)
+simulation <- simulation |> 
+  mutate(
+    across(
+      all_of(cols),
+      \(x) replace_outlier2(x)
+    )
+  )
+
+for (i in 1:length(cols)) {
+  vecteur <- simulation[, (colnames(simulation) %in% cols[i])]
+  #dev.off()
+  par(mar=c(5, 5, 2, 5)) 
+  hist(vecteur, 
+       #breaks = c(0,50, 100,200, 300, 400,500,750,1000), 
+       main = paste("Distribution de ", cols[i]), 
+       xlab=cols[i], 
+       freq = T)
+  dev.copy(png,paste(paste('./figuresSimulation/SansException_distribution_', cols[i], sep= ''), '.png', sep= ''))
+  dev.off()
+}
+```
+
+#### Tracer la distribution par degurba, et par statut_camp
+
+```{r}
+# Créer un violin plot (à la main) qui juxtapose les distributions par catégories degurba (degré d'urbanisation)
+medians <- simulation  %>%
+  group_by(degurba, statut_camp) %>%
+  summarise(median_value = median(distance_13_mines_decharges_chantiers, na.rm = T))
+
+ggplot(simulation , aes(x = degurba , y = distance_13_mines_decharges_chantiers, fill = statut_camp)) +
+  geom_violin(position = position_dodge(0.8)) +
+  geom_crossbar(data = medians, aes(x = degurba, y = median_value, group = statut_camp, 
+                                    ymin = median_value, ymax = median_value), 
+                color = "black", width = 0.8, position = position_dodge(0.8))+ 
+  labs(title = "Comparaison des distributions entre simulation et camps",
+       x = "Ville - banlieue - campagne",
+       y = "Distance aux mines, décharges et chantiers") +
+  theme_minimal()
+  
+dev.copy(png,'./figuresSimulation/Violin_mines_degurba.png')
+dev.off()
+
+
+# Créer le violin plot avec crossbar median_hilow  mean_cl_normal
+# ggplot(simulation, aes(x = degurba, y = distance_13_mines_decharges_chantiers, fill = statut_camp)) +
+#   geom_violin(trim = FALSE, alpha = 0.6, position = position_dodge(0.8)) +
+#   stat_summary(
+#     fun.data = "median_hilow", 
+#     geom = "crossbar", 
+#     width = 0.2, 
+#     position = position_dodge(0.8),
+#     color = "black",
+#     width = 0.3
+#   ) +
+#   labs(title = "Comparaison des distributions entre simulation et camps", 
+#        x = "Ville - banlieue - campagne", y = "Distance aux mines, décharges et chantiers") +
+#   scale_fill_brewer(palette = "Set2") +
+#   theme_minimal()
+
+
+```
+
+##### Fonction drawViolinPerGroup
+
+```{r}
+# Fonction à compiler
+varname = "ecart_densites"
+filter = NA
+filterValue = NA
+# distance_13_mines_decharges_chantiers
+
+## Utiliser la variable ensuite : !! rlang::sym(varname)
+
+drawViolinPerGroup <- function (simulation, varname, filter, filterValue) {
+  
+  legend = "sans filtre"
+  data <- simulation
+  if (! is.na(filter))  {
+    data <- simulation |> filter(!! rlang::sym(filter)==filterValue)
+    legend = str_interp("filtrée avec ${filter} = ${filterValue}")
+  }
+  #print(legend)
+  #print(dim(data))
+
+  # Créer un violin plot
+  medians <- data  %>%
+    group_by(statut_camp) %>%
+    summarise(median_value = median(!! rlang::sym(varname), na.rm = T))
+  
+  g <- ggplot(data, aes(x = statut_camp, y = !! rlang::sym(varname), fill = statut_camp)) +
+    geom_violin() +
+    geom_crossbar(data = medians, aes(x = statut_camp, y = median_value, 
+                                      ymin = median_value, ymax = median_value), 
+                  color = "black", width = 0.8)+
+    labs(title = paste("Comparaison des distributions entre simulation et camps \n", legend),
+         x = "Simulation ou non",
+         y = varname )+
+    theme_minimal()
+  
+  print(g)
+  
+  fichier = str_interp("./figuresSimulation/Violin_${varname}_${legend}.png")
+  #print(fichier)
+  #dev.copy(png,fichier)
+  dev.print(png,filename=fichier, width=7, height=7,units="in",res = 200)
+  dev.off()
+}
+```
+
+##### Appeler la fonction R : 
+
+```{r}
+print(getwd())
+drawViolinPerGroup(simulation, "ecart_densites", NA, NA)
+
+drawViolinPerGroup(simulation, "ecart_densites", "degurba", 1)
+drawViolinPerGroup(simulation, "ecart_densites", "degurba", 2)
+drawViolinPerGroup(simulation, "ecart_densites", "degurba", 3)
+
+drawViolinPerGroup(simulation, "ecart_densites", "fua", 'C')
+drawViolinPerGroup(simulation, "ecart_densites", "fua", 'K')
+drawViolinPerGroup(simulation, "ecart_densites", "fua", 'F')
+drawViolinPerGroup(simulation, "ecart_densites", "fua", 'H')
+
+```
+
+```{r echo=FALSE}
+drawViolinPerGroup(simulation, "distance_121_zi_zac", "fua", 'C')
+drawViolinPerGroup(simulation, "distance_121_zi_zac", "fua", 'K')
+drawViolinPerGroup(simulation, "distance_121_zi_zac", "fua", 'F')
+drawViolinPerGroup(simulation, "distance_121_zi_zac", "fua", 'H')
+```
+
+```{r echo=FALSE}
+drawViolinPerGroup(simulation, "distance_13_mines_decharges_chantiers", "fua", 'C')
+drawViolinPerGroup(simulation, "distance_13_mines_decharges_chantiers", "fua", 'K')
+drawViolinPerGroup(simulation, "distance_13_mines_decharges_chantiers", "fua", 'F')
+drawViolinPerGroup(simulation, "distance_13_mines_decharges_chantiers", "fua", 'H')
+
+
+```
+
+```{r}
+drawViolinPerGroup(simulation, "distance_122_reseaux_routiers", "fua", 'C')
+drawViolinPerGroup(simulation, "distance_122_reseaux_routiers", "fua", 'K')
+drawViolinPerGroup(simulation, "distance_122_reseaux_routiers", "fua", 'F')
+drawViolinPerGroup(simulation, "distance_122_reseaux_routiers", "fua", 'H')
+```
+
+```{r}
+
+# Fonction à compiler
+varname = "distance_121_zi_zac"
+groupe = "fua"
+# distance_13_mines_decharges_chantiers
+
+## Utiliser la variable ensuite : !! rlang::sym(varname)
+
+drawViolinPerGroupTous <- function (simulation, varname, groupe) {
+  
+  medians <- simulation  %>%
+    group_by(!! rlang::sym(groupe), statut_camp) %>%
+    summarise(median_value = median(!! rlang::sym(varname), na.rm = T))
+
+  g <- ggplot(simulation , aes(x = !! rlang::sym(groupe) , y = !! rlang::sym(varname), 
+                               fill = statut_camp)) +
+    geom_violin(position = position_dodge(0.8)) +
+    geom_crossbar(data = medians, aes(x = !! rlang::sym(groupe), y = median_value, group = statut_camp, 
+                                      ymin = median_value, ymax = median_value), 
+                  color = "black", width = 0.8, position = position_dodge(0.8))+ 
+    labs(title = "Comparaison des distributions entre simulation et camps",
+         x = groupe,
+         y = varname) +
+    theme_minimal()
+  
+  print(g)
+  
+  fichier = str_interp("./figuresSimulation/Violin_${varname}_${groupe}.png")
+  print(fichier)
+  #dev.copy(png,fichier)
+  dev.print(png,filename=fichier, width=7, height=7,units="in",res = 200)
+  dev.off()
+}
+  
+
+```
+
+```{r}
+drawViolinPerGroupTous(simulation, "ecart_densites", "fua")
+drawViolinPerGroupTous(simulation, "distance_122_reseaux_routiers", "fua")
+drawViolinPerGroupTous(simulation, "distance_121_zi_zac", "fua")
+drawViolinPerGroupTous(simulation, "distance_124_aeroport", "fua")
+```
+
+### Analyser la variance mais en fonction d'une pondération
+
+##### Créer un design avec survey (sans strates ni grappes ici 
+
+Les jumeaux valent 1/n de leur nombre s'ils sont n jumeaux pour un même camps.
+
+Les vrais comptent beaucoup plus que les simulés (qui sont très nombreux, presque 8 fois plus)
+
+```{r}
+# |> filter (statut_camp=='sim')
+# simulation <- simulation |> 
+#   add_count(parent_id, name = "poids") |>
+#   mutate(poids = as.numeric(poids) )
+# 
+# simulation <- simulation |>
+#   mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+
+simulation <- simulation |>
+  add_count(statut_camp, name = "poids") |>
+  mutate(poids = as.numeric(poids) ) |>
+  mutate(poids =  1/(2*poids))
+  
+
+simulation |> arrange(parent_id) |>  filter (parent_id == 1088) |> head(10)
+ 
+library(survey)
+simulationw <- svydesign(ids = ~1, data = simulation, weights = ~poids)
+```
+
+##### Version stratifiée sur les villes (ville_proche_nom) 
+
+<https://r-survey.r-forge.r-project.org/survey/example-design.html>
+
+<https://larmarange.github.io/analyse-R/definir-un-plan-d-echantillonnage-complexe.html>
+
+```{r}
+
+sim <- simulation |>
+  add_count(ville_proche_nom, name = "poids") |>
+  mutate(poids = as.numeric(poids) ) |>
+  filter(poids > 1) ## Eviter le cas ou pas de jumeau dans la même ville_proche_nom
+
+sim <- sim |>
+  mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+
+
+sim |> arrange(ville_proche_nom) |>  filter (ville_proche_nom == 'FUA of Lyon') |> head(10)
+ 
+library(survey)
+simulationw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = sim, weights = ~poids)
+
+
+
+```
+
+#### Intervalle de confiance sur les moyennes
+
+```{r}
+moyenne <- svymean(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='sim'), na.rm = TRUE)
+
+confint(moyenne)
+#distance_13_mines_decharges_chantiers 8.028063 8.283084
+
+moyenneRef <- svymean(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='vrai'), na.rm = TRUE)
+
+confint(moyenneRef)
+#distance_13_mines_decharges_chantiers 7.225574 7.935614
+```
+
+Variance de cette variable
+
+```{r}
+
+svyvar(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='sim'), na.rm = "TRUE")
+#distance_13_mines_decharges_chantiers   31.452 0.4918
+svyvar(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='vrai'), na.rm = "TRUE")
+#distance_13_mines_decharges_chantiers   30.861 1.4911
+
+```
+
+#### Histogramme pondéré
+
+```{r}
+
+svyhist(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='sim'), col = "peachpuff", main = "Histogramme des distances aux décharges pour camps simulés")
+dev.copy(png,'./figuresSimulation/Hist_mines_sim.png')
+dev.off()
+
+
+ggplot(simulation, aes(x = distance_13_mines_decharges_chantiers, fill = statut_camp)) +
+  #geom_histogram(position = "identity", alpha = 0.4, bins = 50) + 
+  geom_histogram(aes(y = ..density..), bins = 50, alpha = 0.4) +
+  geom_density(color = "black", size = 0.75)
+
+dev.copy(png,'./figuresSimulation/Hist_mines_sansPonderation.png')
+dev.off()
+
+svyhist(~distance_13_mines_decharges_chantiers, design = subset(simulationw, statut_camp == 'vrai'), main = "Superposition des distributions",
+        col = rgb(1, 0, 0, 0.5),  xlab = "distance_13_mines_decharges_chantiers")
+svyhist(~distance_13_mines_decharges_chantiers, design = subset(simulationw, statut_camp == 'sim'), add = TRUE, col = rgb(0, 0, 1, 0.5))
+
+# Légende pour différencier les groupes
+legend("topright", legend = c("vrai", "sim"),
+       fill = c(rgb(1, 0, 0, 0.5), rgb(0, 0, 1, 0.5)))
+
+dev.copy(png,'./figuresSimulation/Hist_mines_avecPonderation.png')
+dev.off()
+
+```
+
+#### Analyse de variance pondérée à 1 facteur
+
+```{r}
+
+svyttest(distance_13_mines_decharges_chantiers ~ statut_camp, simulationw)
+
+```
+
+p-value = 0.0005041 (presque 0) donc H0 (hypothèse d'indépendance est rejetée sous un risque faible ( 0.0005041 ) donc H1 est acceptée : il y a une liaison entre les variables distance aux mines et vrai camps ou camps simulé.
+
+Les camps simulés ont tendance à être plus loin des mines et des décharges.
+
+#### On rejoue la même vérif pour distance_121_zi_zac
+
+```{r}
+svyttest(distance_121_zi_zac ~ statut_camp, simulationw)
+
+moyenne <- svymean(~distance_121_zi_zac, subset(simulationw, statut_camp =='sim'), na.rm = TRUE)
+
+confint(moyenne)
+
+moyenneRef <- svymean(~distance_121_zi_zac, subset(simulationw, statut_camp =='vrai'), na.rm = TRUE)
+
+confint(moyenneRef)
+
+```
+
+```{r}
+
+svyttest(distance_124_aeroport ~ statut_camp, simulationw)
+
+
+moyenne <- svymean(~distance_124_aeroport, subset(simulationw, statut_camp =='sim'), na.rm = TRUE)
+
+confint(moyenne)
+
+moyenneRef <- svymean(~distance_124_aeroport, subset(simulationw, statut_camp =='vrai'), na.rm = TRUE)
+
+confint(moyenneRef)
+
+```
+
+```{r}
+
+svyttest(distance_122_reseaux_routiers ~ statut_camp, simulationw)
+
+moyenne <- svymean(~distance_122_reseaux_routiers, subset(simulationw, statut_camp =='sim'), na.rm = TRUE)
+
+confint(moyenne)
+#                                  2.5 %   97.5 %
+# distance_122_reseaux_routiers 9.066591 9.395553
+
+moyenneRef <- svymean(~distance_122_reseaux_routiers, subset(simulationw, statut_camp =='vrai'), na.rm = TRUE)
+
+confint(moyenneRef)
+#                                 2.5 %   97.5 %
+# distance_122_reseaux_routiers 6.36778 7.724809
+
+```
+
+#### Croiser les natures de CLC avec le statut du camps.
+
+Décliner les test du khi2 aussi en fonction de degurba comparables. Ou bien d'appartenance à l'enveloppe fonctionnelle des villes (C = coeur de cité, K = coeur de grosse cité, F = banlieue de cité, H = hors aire fonctionnelle urbaine)
+
+```{r}
+# Au choix : 
+test   <- simulation
+# test <- simulation |> filter(degurba==1)
+# test <- simulation |> filter(degurba==2)
+# test <- simulation |> filter(degurba==3)
+
+#test <- simulation |> filter(fua=='C')
+# test <- simulation |> filter(fua=='K')
+test <- simulation |> filter(fua=='F')
+# test <- simulation |> filter(fua=='H')
+
+```
+
+##### Test quali / quanti robuste de wilcox
+
+```{r}
+wilcox.test(subset(test, statut_camp=='vrai')$distance_13_mines_decharges_chantiers, subset(test, statut_camp=='sim')$distance_13_mines_decharges_chantiers)
+#W = 3264581, p-value = 0.0007556 : tout
+# W = 722711, p-value = 0.4326 si degurba = 1
+# W = 463655, p-value = 0.4983 si fua=='C'
+# W = 162965, p-value = 0.04746 si fua=='F'
+
+wilcox.test(subset(test, statut_camp=='vrai')$distance_121_zi_zac, subset(test, statut_camp=='sim')$distance_121_zi_zac)
+#W = 2161649, p-value < 2.2e-16 : tout
+# W = 596156, p-value = 1.689e-11 si degurba = 1
+#W = 388544, p-value = 2.02e-08 si fua=='C'
+#W = 110924, p-value < 2.2e-16 si fua=='F'
+
+wilcox.test(subset(test, statut_camp=='vrai')$distance_124_aeroport, subset(test, statut_camp=='sim')$distance_124_aeroport)
+#W = 3067822, p-value = 6.252e-10
+#W = 668756, p-value = 0.0009146 si degurba = 1
+#W = 436452, p-value = 0.01387 si fua=='C'
+#W = 148029, p-value = 0.0001358 si fua=='F'
+
+wilcox.test(subset(test, statut_camp=='vrai')$distance_122_reseaux_routiers, subset(test, statut_camp=='sim')$distance_122_reseaux_routiers)
+#W = 3020834, p-value = 1.4e-11
+#W = 650144, p-value = 3.823e-05 si degurba = 1
+#W = 416141, p-value = 0.0002044 si fua=='C'
+#W = 158701, p-value = 0.01222 si fua=='F'
+
+wilcox.test(subset(test, statut_camp=='vrai')$distance_41_zones_humides_interieures, subset(test, statut_camp=='sim')$distance_41_zones_humides_interieures)
+#W = 717502, p-value = 0.4637 si degurba = 1
+#W = 448037, p-value = 0.1689 si fua=='C'
+#W = 170625, p-value = 0.3071 si fua=='F'
+
+```
+
+##### Test du khi2 : Examiner le lien entre clc et simulation
+
+-   111 Tissu urbain continu
+
+-   **112 Tissu urbain discontinu**
+
+-   **121 Zones industrielles ou commerciales et installations publiques**
+
+-   122 Réseaux routier et ferroviaire et espaces associés
+
+-   123 Zones portuaires
+
+-   **124 Aéroports**
+
+-   131 Extraction de matériaux
+
+-   132 Décharges
+
+-   133 Chantiers
+
+-   141 Espaces verts urbains
+
+-   142 Equipements sportifs et de loisirs
+
+-   2 Territoires agricoles
+
+-   3 Forêts et milieux semi-naturels
+
+-   4 Zones humides
+
+-   5 Surfaces en eau
+
+```{r}
+
+# Transformer la table en data.frame pour faciliter la manipulation
+tableau <- table(test$statut_camp, test$clc_majoritaire_13_mixte)
+
+# Filtrer les colonnes ayant un effectif total inférieur à 5
+colonnes_a_conserver <- apply(tableau, 2, function(col) all(col >= 5))
+tableau[, colonnes_a_conserver]
+testkhi2 <- chisq.test(tableau[, colonnes_a_conserver])
+
+testkhi2$p.value 
+# 1.027937e-204
+testkhi2$expected
+#X-squared = 977.85, df = 9, p-value < 2.2e-16
+
+#Observer les résidus (| | > 2 sont significatifs)
+round(testkhi2$residuals,2)
+
+#         2      3    111    112    121    122    123    124    141    142
+# sim    5.25   3.69  -2.92  -5.03  -4.92   0.36  -1.51  -3.21   0.41  -0.45
+# vrai -14.59 -10.24   8.12  13.95  13.65  -1.01   4.20   8.92  -1.14   1.24
+
+#filtre sur fua = F
+  #          2     3   112   121   124   142
+  # sim   2.21  1.01 -2.73 -3.38 -2.03 -0.85
+  # vrai -7.55 -3.44  9.31 11.52  6.93  2.90
+  
+rstatix::cramer_v(tableau[, colonnes_a_conserver]) 
+#0.3461928 : 34% des choix CLC ne sont pas le fait du hasard
+
+
+
+```
+
+#### Vérifier l'analyse avec la pondération
+
+<https://r-survey.r-forge.r-project.org/survey/example-svrepdesign.html>
+
+<https://r-survey.r-forge.r-project.org/survey/example-design.html>
+
+Attention,
+
+1.  sélectionner les vrai avec degurba = 1,
+
+2.  puis récupérer les simulations correspondantes qui tombent dans le même degré d'urbanisation
+
+3.  Echantillon stratifié par parent_id ? (la somme des poids ne fait pas 1). Ou bien par ville_proche_nom ?
+
+##### Design à faire vérifier aussi
+
+```{r}
+#fua=='F'
+#degurba==1
+urban <- simulation |> filter(degurba==1 & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
+
+urbanSim <- simulation |> filter(degurba==1 & parent_id %in% urban$unique_id)
+
+test <- urbanSim  |>
+  add_count(ville_proche_nom, name = "poids")|>
+  mutate(poids = as.numeric(poids) ) |>
+  filter(poids > 1) # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
+
+
+test <- test |>
+  mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+
+
+#test |> arrange(parent_id) |>  filter (parent_id == 1088) |> head(10)
+library(survey)
+
+testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
+
+
+```
+
+##### Test d'association avec ce design
+
+<https://r-survey.r-forge.r-project.org/survey/example-chisq.html>
+
+```{r}
+croisement <- svytable(~statut_camp + clc_majoritaire_13_mixte, testw)
+res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWald") 
+#, statistic="adjWald" 
+#F = 76.171, ndf = 11.281, ddf = 94738.048, p-value < 2.2e-16
+print("Les résidus")
+round(res$residuals, 2)
+
+#               clc_majoritaire_13_mixte
+# statut_camp      2      3      4      5    111    112    121    122    123    124    131    132    133    141    142
+# sim   20.82  14.69   3.64   5.22  -7.90 -14.46 -12.75   1.20  -3.57  -7.22   0.47   1.50   0.47   1.34  -1.37
+# vrai -20.82 -14.69  -3.64  -5.22   7.90  14.46  12.75  -1.20   3.57   7.22  -0.47  -1.50  -0.47  -1.34   1.37
+
+## Resultats pondérés et filtrés par degurba : 2, 3, 111
+#            clc_majoritaire_13_mixte
+# statut_camp     2     3     4     5   111   112   121   122   123   124   131   132   133   141   142
+#        sim  16.48 13.68  2.36  2.71 -5.11 -2.66 -2.74  0.04 -2.36 -3.76  2.18  2.36  0.34  3.05  0.78
+#        vrai -7.44 -6.17 -1.07 -1.22  2.31  1.20  1.24 -0.02  1.06  1.70 -0.99 -1.07 -0.15 -1.38 -0.35
+       
+```
+
+Conserver les résultats des croisements (pondérés)
+
+```{r}
+Compil <- as.data.frame(croisement)
+
+Compil <- Compil |> 
+  left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), by = c("statut_camp" = "statut_camp", "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
+Compil$filtre<- 'degurba1'
+Compil
+
+```
+
+si degurba = 2
+
+```{r}
+round(res$residuals, 2)
+
+Compil2 <- as.data.frame(croisement)
+Compil2 <- Compil2 |> 
+  left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), by = c("statut_camp" = "statut_camp", "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
+Compil2$filtre<- 'degurba2'
+Compil2
+
+
+Compil <- rbind(Compil, Compil2)
+
+Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
+```
+
+Si degurba = 3
+
+```{r}
+urban <- simulation |> filter(degurba==3 & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
+
+urbanSim <- simulation |> filter(degurba==3 & parent_id %in% urban$unique_id)
+
+test <- urbanSim  |>
+  add_count(ville_proche_nom, name = "poids")|>
+  mutate(poids = as.numeric(poids) ) |>
+  filter(poids > 1) |> # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
+  mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+
+testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
+
+croisement <- svytable(~statut_camp + clc_majoritaire_13_mixte, testw)
+res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWald") 
+
+print(round(res$residuals, 2))
+
+Compil2 <- as.data.frame(croisement)
+Compil2 <- Compil2 |> 
+  left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), by = c("statut_camp" = "statut_camp", "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
+Compil2$filtre<- 'degurba2'
+Compil2
+
+
+Compil <- rbind(Compil, Compil2)
+
+Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
+
+
+```
+
+```{r}
+write.table(Compil, "./croisements_clc_degurba_identiques.csv", row.names = F)
+
+```
+
+```{r}
+types_de_fua = c('C', 'K', 'F', 'H');
+
+Compil <- data.frame()
+
+for (type in types_de_fua) {
+  urban <- simulation |> filter(fua==type & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
+  
+  urbanSim <- simulation |> filter(fua==type & parent_id %in% urban$unique_id)
+  
+  test <- urbanSim  |>
+    add_count(ville_proche_nom, name = "poids")|>
+    mutate(poids = as.numeric(poids) ) |>
+    filter(poids > 1) |> # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
+    mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+  
+  testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
+  
+  croisement <- svytable(~statut_camp + clc_majoritaire_13_mixte, testw)
+  res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWald") 
+  
+  print(round(res$residuals, 2))
+  
+  Compil2 <- as.data.frame(croisement)
+  Compil2 <- Compil2 |> 
+    left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), 
+              by = c("statut_camp" = "statut_camp", 
+                     "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
+  Compil2$filtre<- type
+  #Compil2
+  Compil <- rbind(Compil, Compil2)
+}
+
+
+
+Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
+write.table(Compil|> arrange(clc_majoritaire_13_mixte, filtre, statut_camp), 
+            "./croisements_clc_fua_identiques.csv", row.names = F)
+```
+
+```{r}
+types_de_degurba = c(1,2,3);
+
+Compil <- data.frame()
+
+for (type in types_de_degurba) {
+  urban <- simulation |> filter(degurba==type & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
+  
+  urbanSim <- simulation |> filter(degurba==type & parent_id %in% urban$unique_id)
+  
+  test <- urbanSim  |>
+    add_count(ville_proche_nom, name = "poids")|>
+    mutate(poids = as.numeric(poids) ) |>
+    filter(poids > 1) |> # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
+    mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+  
+  testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
+  
+  croisement <- svytable(~statut_camp + clc_majoritaire_13_mixte, testw)
+  res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWald") 
+  
+  print(round(res$residuals, 2))
+  
+  Compil2 <- as.data.frame(croisement)
+  Compil2 <- Compil2 |> 
+    left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), 
+              by = c("statut_camp" = "statut_camp", 
+                     "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
+  Compil2$filtre<- type
+  #Compil2
+  Compil <- rbind(Compil, Compil2)
+}
+
+
+
+Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
+write.table(Compil|> arrange(clc_majoritaire_13_mixte, filtre, statut_camp), 
+            "./croisements_clc_degurba_identiques.csv", row.names = F)
 
 ```
