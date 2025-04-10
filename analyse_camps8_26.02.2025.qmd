@@ -376,12 +376,44 @@ tododf <- camps |> filter(is.na(str_match(camps$nom, pattern='CADA'))) |>
 
 ```
 
+##### Filtrer sur les camps de type fermé
+
+```{r}
+### Filtrer les camps de type ouvert ou semi-ouvert
+
+nbcase <- camps |> filter(is.na(str_match(camps$type_camp, pattern='ouvert'))) |> 
+      select(nom_unique, iso3) |>
+      nrow()
+print(nbcase)
+#276 à la place de 994 
+
+
+tododf <- camps |> filter(is.na(str_match(camps$type_camp, pattern='ouvert'))) |> 
+                select(all_of(cols))
+```
+
+##### Filtrer sur les camps de type ouvert et semi-ouvert
+
+```{r}
+### Filtrer les camps de type ouvert ou semi-ouvert
+
+nbcase <- camps |> filter(!is.na(str_match(camps$type_camp, pattern='ouvert'))) |> 
+      select(nom_unique, iso3) |>
+      nrow()
+print(nbcase)
+#718 à la place de 994 dont 373 camps sont des CADA en France
+
+
+tododf <- camps |> filter(!is.na(str_match(camps$type_camp, pattern='ouvert'))) |> 
+                select(all_of(cols))
+```
+
 ##### Exécuter l'AFCM avec le package ade4
 
 ```{r}
 
 #row.names(tododf) <- camps$unique_id 
-row.names(tododf) <- (camps |> filter(is.na(str_match(camps$nom, pattern='CADA'))))$unique_id 
+row.names(tododf) <- (camps |> filter(!is.na(str_match(camps$type_camp, pattern='ouvert'))))$unique_id 
 
 library(ade4)
 
@@ -661,46 +693,72 @@ par(mar=c(2, 2, 3, 2))
 plot(classif, which=2, main = "")
 title("Arbre de classification des individus, extraits de l'AFCM", 
       cex.main = 1,   font.main= 4, col.main= "blue")
-dev.copy(png,'./figuresAFCM/arbre-classif_postAFCM_18mars2025.png')
+dev.copy(png,'./figuresAFCM/arbre-classif_postAFCM_25mars2025_ouvert.png')
 dev.off()
 
 #Choisir k est arbitraire 
 membersClus4 <- cutree(classif, k = 4)
-write.table(membersClus4, "./classesAFCM_4_18mars2025.csv", row.names = F)
+#write.table(membersClus4, "./classesAFCM_4_25mars2025.csv", row.names = F)
 
 membersClus3 <- cutree(classif, k = 3)
-write.table(membersClus3, "./classesAFCM_3_18mars2025.csv", row.names = F)
+#write.table(membersClus3, "./classesAFCM_3_25mars2025.csv", row.names = F)
 
 membersClus2 <- cutree(classif, k = 2)
-write.table(membersClus2, "./classesAFCM_2_18mars2025.csv", row.names = F)
+#write.table(membersClus2, "./classesAFCM_2_25mars2025.csv", row.names = F)
 
 membersClus5 <- cutree(classif, k = 5)
-write.table(membersClus5, "./classesAFCM_5_18mars2025.csv", row.names = F)
+#write.table(membersClus5, "./classesAFCM_5_25mars2025.csv", row.names = F)
 
 ```
 
 # Analyser la classification
 
-membersClusCopy \<- membersClus4 for (i in 1:length(membersClusCopy)) { if (membersClusCopy\[i\] == 2 ) { membersClus4\[i\] \<- 11 #GROSSE VILLE } if (membersClusCopy\[i\] == 3 ) { membersClus4\[i\] \<- 12 #PETITE VILLE } if (membersClusCopy\[i\] == 1 ) { membersClus4\[i\] \<- 21 #RURAL } if (membersClusCopy\[i\] == 4 ) { 4 membersClus4\[i\] \<- 22 #RURAL très isolé } }
-
 ```{r}
-## Renumérotation
+## Renumérotation si nécessaire uniquement
 membersClusCopy <- membersClus4 
-for (i in 1:length(membersClusCopy)) 
-{ 
-  if (membersClusCopy[i] == 2 ) { membersClus4[i] <- 11 #GROSSE VILLE , dans le Core
-  } 
+
+# for (i in 1:length(membersClusCopy)) 
+# { 
+#   if (membersClusCopy[i] == 2 ) { membersClus4[i] <- 11 #GROSSE VILLE , dans le Core
+#   } 
+#   if (membersClusCopy[i] == 3 ) { membersClus4[i] <- 12 #PETITE VILLE / BANLIEUE
+#   } 
+#   if (membersClusCopy[i] == 1 ) { membersClus4[i] <- 21 #RURAL 
+#   } 
+#   if (membersClusCopy[i] == 4 ) { membersClus4[i] <- 22 #RURAL très isolé 
+#   } 
+# }
+
+# Ouvert
+for (i in 1:length(membersClusCopy))
+{
+  if (membersClusCopy[i] == 1 ) { membersClus4[i] <- 11 #GROSSE VILLE , dans le Core
+  }
   if (membersClusCopy[i] == 3 ) { membersClus4[i] <- 12 #PETITE VILLE / BANLIEUE
-  } 
-  if (membersClusCopy[i] == 1 ) { membersClus4[i] <- 21 #RURAL 
-  } 
-  if (membersClusCopy[i] == 4 ) { membersClus4[i] <- 22 #RURAL très isolé 
-  } 
+  }
+  if (membersClusCopy[i] == 2 ) { membersClus4[i] <- 21 #RURAL
+  }
+  if (membersClusCopy[i] == 4 ) { membersClus4[i] <- 22 #RURAL très isolé
+  }
 }
+
+# Fermés
+
+# for (i in 1:length(membersClusCopy)) 
+# { 
+#   if (membersClusCopy[i] == 2) { membersClus4[i] <- 11 #GROSSE VILLE , dans le Core
+#   } 
+#   if (membersClusCopy[i] == 4) { membersClus4[i] <- 12 #PETITE VILLE / BANLIEUE
+#   } 
+#   if (membersClusCopy[i] == 3) { membersClus4[i] <- 21 #RURAL 
+#   } 
+#   if (membersClusCopy[i] == 1 ) { membersClus4[i] <- 22 #RURAL très isolé 
+#   } 
+# }
 ```
 
 ```{r}
-campsSansCada <- camps |> filter(is.na(str_match(camps$nom, pattern='CADA')))
+campsSansCada <- camps |> filter(!is.na(str_match(camps$type_camp, pattern='ouvert')))
 CAH_Camps <- cbind(campsSansCada, membersClus2)
 CAH_Camps <- cbind(CAH_Camps, membersClus3)
 CAH_Camps <- cbind(CAH_Camps, membersClus4)
@@ -717,7 +775,7 @@ CAH_Camps |>
 
 
 
-write.table(CAH_Camps, "./CAHcamps8_18-03-2025.csv", sep = ";" , dec = ".", row.names = FALSE)
+write.table(CAH_Camps, "./CAHcamps8_25-03-2025_ouvert.csv", sep = ";" , dec = ".", row.names = FALSE)
 
 
 ```
@@ -775,20 +833,20 @@ resumeFct <- function(x) {
 
 CAH_Camps <- CAH_Camps |>
   mutate(membersClus2 = as.factor(membersClus2)) |>
-  mutate(membersClus2 = recode(membersClus2, `1` = '2 - rural', `2` = '1 - urbain'))
+  mutate(membersClus2 = recode(membersClus2, `2` = '2 - rural', `1` = '1 - urbain'))
 
 
 resume <- CAH_Camps |>
    group_by(membersClus) |>
    summarise_all( resumeFct)
 
-write.table(resume, "./CAHcamps8_18-03-2025_resume.csv", sep = ";" , dec = ".", row.names = FALSE)
+write.table(resume, "./CAHcamps8_25-03-2025_resume_ouvert.csv", sep = ";" , dec = ".", row.names = FALSE)
 
 resume
 ```
 
 ```{r}
-write.table(CAH_Camps, "./CAHcamps8_18-03-2025.csv", sep = ";" , dec = ".", row.names = FALSE)
+write.table(CAH_Camps, "./CAHcamps8_25-03-2025_ouvert.csv", sep = ";" , dec = ".", row.names = FALSE)
 
 ```
 
@@ -894,7 +952,7 @@ export = TRUE
 if (export == T) {
   mf_export(
     countries |>filter (ADM0_A3 %in% c('TUR', 'ESP', 'IRL', 'DNK', 'EST')),
-    filename = "map.png",
+    filename = "./figuresAFCM/map_fermes.png",
     width = 1000,
     height = 700,
     res = 96,
@@ -956,7 +1014,7 @@ mf_map(
   add = TRUE
 )
 # Ajout d'un titre
-mf_title(txt = "Typologie des lieux d'enfermement de migrants")
+mf_title(txt = "Typologie des lieux d'enfermement (fermes) de migrants ")
 # Crédits
 mf_credits("Auteurs : Christine Plumejeaud-Perreau\nSources : Thèse Louis Fernier, 2025",
            pos = "rightbottom")
@@ -1003,7 +1061,7 @@ L'insertion réussit à positionner aléatoirement dans le périmètre de la FUA
 
 L'objectif est de vérifier si les camps simulés, à degurba égal (puisque c'est la variable la plus discriminante) présente une distribution très différente pour ces trois distances. Notre hypothèse est que les camps simulés sont plus loin en distance, en surtout pour ce qui concerne degurba = 1 (ville).
 
-#### Lire les données en BDD
+### Lire les données en BDD
 
 ```{r}
 
@@ -1117,7 +1175,7 @@ for (i in 1:length(cols)) {
 }
 ```
 
-#### Tracer la distribution par degurba, et par statut_camp
+### Tracer la distribution par degurba, et par statut_camp
 
 ```{r}
 # Créer un violin plot (à la main) qui juxtapose les distributions par catégories degurba (degré d'urbanisation)
@@ -1205,7 +1263,7 @@ drawViolinPerGroup <- function (simulation, varname, filter, filterValue) {
 }
 ```
 
-##### Appeler la fonction R : 
+##### Appeler la fonction R :
 
 ```{r}
 print(getwd())
@@ -1290,87 +1348,74 @@ drawViolinPerGroupTous(simulation, "distance_121_zi_zac", "fua")
 drawViolinPerGroupTous(simulation, "distance_124_aeroport", "fua")
 ```
 
-### Analyser la variance mais en fonction d'une pondération
-
-##### Créer un design avec survey (sans strates ni grappes ici 
-
-Les jumeaux valent 1/n de leur nombre s'ils sont n jumeaux pour un même camps.
-
-Les vrais comptent beaucoup plus que les simulés (qui sont très nombreux, presque 8 fois plus)
+##### distance_121_zi_zac : distribution des FUA , points dans degurba == 1
 
 ```{r}
-# |> filter (statut_camp=='sim')
-# simulation <- simulation |> 
-#   add_count(parent_id, name = "poids") |>
-#   mutate(poids = as.numeric(poids) )
-# 
-# simulation <- simulation |>
-#   mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+drawViolinPerGroupTous(simulation |> filter(degurba==1), "distance_121_zi_zac", "fua")
 
-simulation <- simulation |>
-  add_count(statut_camp, name = "poids") |>
-  mutate(poids = as.numeric(poids) ) |>
-  mutate(poids =  1/(2*poids))
-  
-
-simulation |> arrange(parent_id) |>  filter (parent_id == 1088) |> head(10)
- 
-library(survey)
-simulationw <- svydesign(ids = ~1, data = simulation, weights = ~poids)
 ```
 
-##### Version stratifiée sur les villes (ville_proche_nom) 
+### Analyser la variance mais en fonction d'une pondération
 
 <https://r-survey.r-forge.r-project.org/survey/example-design.html>
 
 <https://larmarange.github.io/analyse-R/definir-un-plan-d-echantillonnage-complexe.html>
 
+Pour comparer des situations équivalentes. On connait la distribution des camps tombant dans chaque catégorie FUA x Degurba (12 en tout).
+
+*"L’échantillonnage stratifié est une méthode qui consiste d’abord à subdiviser la population en groupes homogènes (strates) pour ensuite extraire un échantillon aléatoire de chaque strate. Cette méthode suppose la connaissance de la structure de la population. Pour estimer les paramètres, les résultats doivent être pondérés par l’importance relative de chaque strate dans la population."*
+
+##### Version FINALE stratifiée sur le type de tissu topographique (degurba et fua)
+
 ```{r}
-
-sim <- simulation |>
-  add_count(ville_proche_nom, name = "poids") |>
+test <- simulation  |>
+  add_count(degurba, fua, name = "poids")|>
   mutate(poids = as.numeric(poids) ) |>
-  filter(poids > 1) ## Eviter le cas ou pas de jumeau dans la même ville_proche_nom
+  mutate(poids =  nrow(test)/(3*4*poids))
 
-sim <- sim |>
-  mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
-
-
-sim |> arrange(ville_proche_nom) |>  filter (ville_proche_nom == 'FUA of Lyon') |> head(10)
- 
+test |> arrange(parent_id) |>  filter (parent_id == 1088) |> select(degurba, fua, poids, statut_camp, ville_proche_nom) |> head(20)
 library(survey)
-simulationw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = sim, weights = ~poids)
 
+simulationw <- svydesign(ids = ~1, strata=~degurba+fua, data = test, weights = ~poids)
 
 
 ```
 
-#### Intervalle de confiance sur les moyennes
+#### Analyse de distance_13_mines_decharges_chantiers
+
+##### Intervalle de confiance sur les moyennes
 
 ```{r}
 moyenne <- svymean(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='sim'), na.rm = TRUE)
 
 confint(moyenne)
 #distance_13_mines_decharges_chantiers 8.028063 8.283084
+#distance_13_mines_decharges_chantiers 7.361165 7.589057
+#distance_13_mines_decharges_chantiers 6.020125 7.666029
 
 moyenneRef <- svymean(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='vrai'), na.rm = TRUE)
 
 confint(moyenneRef)
 #distance_13_mines_decharges_chantiers 7.225574 7.935614
+#distance_13_mines_decharges_chantiers 6.576227 7.198072
+#distance_13_mines_decharges_chantiers 6.228017 7.379844
 ```
 
-Variance de cette variable
+##### Variance de cette variable
 
 ```{r}
 
 svyvar(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='sim'), na.rm = "TRUE")
 #distance_13_mines_decharges_chantiers   31.452 0.4918
+#distance_13_mines_decharges_chantiers   23.859 0.3887
+#distance_13_mines_decharges_chantiers   20.625 2.4662
 svyvar(~distance_13_mines_decharges_chantiers, subset(simulationw, statut_camp =='vrai'), na.rm = "TRUE")
 #distance_13_mines_decharges_chantiers   30.861 1.4911
-
+#distance_13_mines_decharges_chantiers   22.546 1.1573
+#distance_13_mines_decharges_chantiers   22.965 1.7992
 ```
 
-#### Histogramme pondéré
+##### Histogramme pondéré
 
 ```{r}
 
@@ -1400,7 +1445,30 @@ dev.off()
 
 ```
 
-#### Analyse de variance pondérée à 1 facteur
+```{r}
+svyhist(~distance_121_zi_zac, design = subset(simulationw, statut_camp == 'vrai'), main = "Superposition des distributions distance_121_zi_zac",
+        col = rgb(1, 0, 0, 0.5),  xlab = "distance_121_zi_zac")
+svyhist(~distance_121_zi_zac, design = subset(simulationw, statut_camp == 'sim'), add = TRUE, col = rgb(0, 0, 1, 0.5))
+
+# Légende pour différencier les groupes
+legend("topright", legend = c("vrai", "sim"),
+       fill = c(rgb(1, 0, 0, 0.5), rgb(0, 0, 1, 0.5)))
+
+dev.copy(png,'./figuresSimulation/Hist_zizac_avecPonderation.png')
+dev.off()
+```
+
+```{r}
+ggplot(simulation, aes(x = distance_121_zi_zac, fill = statut_camp)) +
+  #geom_histogram(position = "identity", alpha = 0.4, bins = 50) + 
+  geom_histogram(aes(y = ..density..), bins = 50, alpha = 0.4) +
+  geom_density(color = "black", size = 0.75)
+
+dev.copy(png,'./figuresSimulation/Hist_zizac_sansPonderation.png')
+dev.off()
+```
+
+##### Test de student
 
 ```{r}
 
@@ -1408,11 +1476,9 @@ svyttest(distance_13_mines_decharges_chantiers ~ statut_camp, simulationw)
 
 ```
 
-p-value = 0.0005041 (presque 0) donc H0 (hypothèse d'indépendance est rejetée sous un risque faible ( 0.0005041 ) donc H1 est acceptée : il y a une liaison entre les variables distance aux mines et vrai camps ou camps simulé.
+p-value = 0.9361 (presque 0) donc H0 (hypothèse d'indépendance) serait rejetée sous un risque fort ( 0.9391 ) donc H0 est acceptée : il n'y a pas de liaison entre les variables distance aux mines et vrai camps ou camps simulé.
 
-Les camps simulés ont tendance à être plus loin des mines et des décharges.
-
-#### On rejoue la même vérif pour distance_121_zi_zac
+#### Analyse de distance_121_zi_zac
 
 ```{r}
 svyttest(distance_121_zi_zac ~ statut_camp, simulationw)
@@ -1420,11 +1486,28 @@ svyttest(distance_121_zi_zac ~ statut_camp, simulationw)
 moyenne <- svymean(~distance_121_zi_zac, subset(simulationw, statut_camp =='sim'), na.rm = TRUE)
 
 confint(moyenne)
-
+#distance_121_zi_zac 2.867585 3.012558
+#distance_121_zi_zac 1.920292 3.103832
 moyenneRef <- svymean(~distance_121_zi_zac, subset(simulationw, statut_camp =='vrai'), na.rm = TRUE)
 
 confint(moyenneRef)
+#distance_121_zi_zac 1.224888 1.503904
+#distance_121_zi_zac 1.018989 1.283107
+```
 
+##### On filtre pour être dans le degurba ==1 et le centre C ou K des FUA.
+
+```{r}
+sousensemblew <- subset(simulationw, degurba =='1' & fua %in% c('C', 'K' ))
+svyttest(distance_121_zi_zac ~ statut_camp, sousensemblew)
+
+moyenne <- svymean(~distance_121_zi_zac, subset(sousensemblew, statut_camp =='sim'), na.rm = TRUE)
+
+confint(moyenne)
+
+moyenneRef <- svymean(~distance_121_zi_zac, subset(sousensemblew, statut_camp =='vrai'), na.rm = TRUE)
+
+confint(moyenneRef)
 ```
 
 ```{r}
@@ -1460,7 +1543,7 @@ confint(moyenneRef)
 
 ```
 
-#### Croiser les natures de CLC avec le statut du camps.
+### Croiser les natures de CLC avec le statut du camps.
 
 Décliner les test du khi2 aussi en fonction de degurba comparables. Ou bien d'appartenance à l'enveloppe fonctionnelle des villes (C = coeur de cité, K = coeur de grosse cité, F = banlieue de cité, H = hors aire fonctionnelle urbaine)
 
@@ -1473,7 +1556,7 @@ test   <- simulation
 
 #test <- simulation |> filter(fua=='C')
 # test <- simulation |> filter(fua=='K')
-test <- simulation |> filter(fua=='F')
+#test <- simulation |> filter(fua=='F')
 # test <- simulation |> filter(fua=='H')
 
 ```
@@ -1584,39 +1667,31 @@ rstatix::cramer_v(tableau[, colonnes_a_conserver])
 
 <https://r-survey.r-forge.r-project.org/survey/example-design.html>
 
-Attention,
-
-1.  sélectionner les vrai avec degurba = 1,
-
-2.  puis récupérer les simulations correspondantes qui tombent dans le même degré d'urbanisation
-
-3.  Echantillon stratifié par parent_id ? (la somme des poids ne fait pas 1). Ou bien par ville_proche_nom ?
-
-##### Design à faire vérifier aussi
+##### Version finale stratifiée en fonction du type de FUA et degurba
 
 ```{r}
-#fua=='F'
-#degurba==1
-urban <- simulation |> filter(degurba==1 & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
 
-urbanSim <- simulation |> filter(degurba==1 & parent_id %in% urban$unique_id)
-
-test <- urbanSim  |>
-  add_count(ville_proche_nom, name = "poids")|>
+test <- simulation  |>
+  add_count(degurba, fua, name = "poids")|>
   mutate(poids = as.numeric(poids) ) |>
-  filter(poids > 1) # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
+  mutate(poids =  nrow(test)/(3*4*poids))
 
+test |> arrange(parent_id) |>  filter (parent_id == 1088) |> select(degurba, fua, poids, statut_camp, ville_proche_nom) |> head(10)
+library(survey)
 
-test <- test |>
-  mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
+testw <- svydesign(ids = ~1, strata=~degurba+fua, data = test, weights = ~poids)
+```
 
+##### Version avec design neutre (pour vérifier)
+
+```{r}
+test <- simulation  |>
+  mutate(poids =  1)
 
 #test |> arrange(parent_id) |>  filter (parent_id == 1088) |> head(10)
 library(survey)
 
-testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
-
-
+testw <- svydesign(ids = ~1,  data = test, weights = ~poids)
 ```
 
 ##### Test d'association avec ce design
@@ -1631,16 +1706,22 @@ res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWa
 print("Les résidus")
 round(res$residuals, 2)
 
-#               clc_majoritaire_13_mixte
-# statut_camp      2      3      4      5    111    112    121    122    123    124    131    132    133    141    142
-# sim   20.82  14.69   3.64   5.22  -7.90 -14.46 -12.75   1.20  -3.57  -7.22   0.47   1.50   0.47   1.34  -1.37
-# vrai -20.82 -14.69  -3.64  -5.22   7.90  14.46  12.75  -1.20   3.57   7.22  -0.47  -1.50  -0.47  -1.34   1.37
 
-## Resultats pondérés et filtrés par degurba : 2, 3, 111
+# #Croisement
+#           clc_majoritaire_13_mixte
+# statut_camp            2            3            4            5          111          112          121          122          123          124          131          132
+#        sim  2471.7835631 2320.9273414  387.0983362  141.0878109  102.2110781 1685.3565291  284.9655270   37.5654366    5.3433218   41.2917592   16.8268709    2.4425394
+#        vrai   47.1632173   20.7684323    0.0000000    0.7120210   74.7466267  419.7773089  142.3869919    3.5517564    4.4407929   43.7582715    0.7811570    0.0000000
 #            clc_majoritaire_13_mixte
-# statut_camp     2     3     4     5   111   112   121   122   123   124   131   132   133   141   142
-#        sim  16.48 13.68  2.36  2.71 -5.11 -2.66 -2.74  0.04 -2.36 -3.76  2.18  2.36  0.34  3.05  0.78
-#        vrai -7.44 -6.17 -1.07 -1.22  2.31  1.20  1.24 -0.02  1.06  1.70 -0.99 -1.07 -0.15 -1.38 -0.35
+# statut_camp          133          141          142
+#        sim     4.3497497   60.1449294   62.3286947
+#        vrai    0.2373403    2.9699184   13.9826778
+# 
+# #Les résidus       
+#             clc_majoritaire_13_mixte
+# statut_camp      2      3      4      5    111    112    121    122    123    124    131    132    133    141    142
+#        sim    3.88   4.24   1.91   1.09  -4.61  -5.16  -5.23   0.04  -1.19  -4.09   0.21   0.15   0.09   0.38  -0.83
+#        vrai -12.16 -13.29  -5.98  -3.42  14.45  16.17  16.39  -0.13   3.72  12.82  -0.66  -0.47  -0.29  -1.18   2.61
        
 ```
 
@@ -1651,144 +1732,9 @@ Compil <- as.data.frame(croisement)
 
 Compil <- Compil |> 
   left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), by = c("statut_camp" = "statut_camp", "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
-Compil$filtre<- 'degurba1'
+#Compil$filtre<- 'degurba1'
 Compil
 
-```
-
-si degurba = 2
-
-```{r}
-round(res$residuals, 2)
-
-Compil2 <- as.data.frame(croisement)
-Compil2 <- Compil2 |> 
-  left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), by = c("statut_camp" = "statut_camp", "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
-Compil2$filtre<- 'degurba2'
-Compil2
-
-
-Compil <- rbind(Compil, Compil2)
-
-Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
-```
-
-Si degurba = 3
-
-```{r}
-urban <- simulation |> filter(degurba==3 & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
-
-urbanSim <- simulation |> filter(degurba==3 & parent_id %in% urban$unique_id)
-
-test <- urbanSim  |>
-  add_count(ville_proche_nom, name = "poids")|>
-  mutate(poids = as.numeric(poids) ) |>
-  filter(poids > 1) |> # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
-  mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
-
-testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
-
-croisement <- svytable(~statut_camp + clc_majoritaire_13_mixte, testw)
-res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWald") 
-
-print(round(res$residuals, 2))
-
-Compil2 <- as.data.frame(croisement)
-Compil2 <- Compil2 |> 
-  left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), by = c("statut_camp" = "statut_camp", "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
-Compil2$filtre<- 'degurba2'
-Compil2
-
-
-Compil <- rbind(Compil, Compil2)
-
-Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
-
-
-```
-
-```{r}
-write.table(Compil, "./croisements_clc_degurba_identiques.csv", row.names = F)
-
-```
-
-```{r}
-types_de_fua = c('C', 'K', 'F', 'H');
-
-Compil <- data.frame()
-
-for (type in types_de_fua) {
-  urban <- simulation |> filter(fua==type & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
-  
-  urbanSim <- simulation |> filter(fua==type & parent_id %in% urban$unique_id)
-  
-  test <- urbanSim  |>
-    add_count(ville_proche_nom, name = "poids")|>
-    mutate(poids = as.numeric(poids) ) |>
-    filter(poids > 1) |> # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
-    mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
-  
-  testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
-  
-  croisement <- svytable(~statut_camp + clc_majoritaire_13_mixte, testw)
-  res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWald") 
-  
-  print(round(res$residuals, 2))
-  
-  Compil2 <- as.data.frame(croisement)
-  Compil2 <- Compil2 |> 
-    left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), 
-              by = c("statut_camp" = "statut_camp", 
-                     "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
-  Compil2$filtre<- type
-  #Compil2
-  Compil <- rbind(Compil, Compil2)
-}
-
-
-
-Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
-write.table(Compil|> arrange(clc_majoritaire_13_mixte, filtre, statut_camp), 
-            "./croisements_clc_fua_identiques.csv", row.names = F)
-```
-
-```{r}
-types_de_degurba = c(1,2,3);
-
-Compil <- data.frame()
-
-for (type in types_de_degurba) {
-  urban <- simulation |> filter(degurba==type & statut_camp=='vrai') |> mutate(unique_id = as.integer(unique_id)) |> select (unique_id)
-  
-  urbanSim <- simulation |> filter(degurba==type & parent_id %in% urban$unique_id)
-  
-  test <- urbanSim  |>
-    add_count(ville_proche_nom, name = "poids")|>
-    mutate(poids = as.numeric(poids) ) |>
-    filter(poids > 1) |> # Eviter le cas ou pas de jumeau dans la même ville_proche_nom
-    mutate(poids = ifelse(statut_camp =='sim', 1, poids-1)) 
-  
-  testw <- svydesign(ids = ~1, strata=~ville_proche_nom, data = test, weights = ~poids)
-  
-  croisement <- svytable(~statut_camp + clc_majoritaire_13_mixte, testw)
-  res <- svychisq(~statut_camp + clc_majoritaire_13_mixte, testw, statistic="adjWald") 
-  
-  print(round(res$residuals, 2))
-  
-  Compil2 <- as.data.frame(croisement)
-  Compil2 <- Compil2 |> 
-    left_join(as.data.frame(round(res$residuals, 2))|> rename(residus = Freq), 
-              by = c("statut_camp" = "statut_camp", 
-                     "clc_majoritaire_13_mixte" = "clc_majoritaire_13_mixte"))  
-  Compil2$filtre<- type
-  #Compil2
-  Compil <- rbind(Compil, Compil2)
-}
-
-
-
-Compil |> arrange(clc_majoritaire_13_mixte, filtre, statut_camp)
-write.table(Compil|> arrange(clc_majoritaire_13_mixte, filtre, statut_camp), 
-            "./croisements_clc_degurba_identiques.csv", row.names = F)
+write.table(Compil, "./croisements_clc_degurba_strates.csv", row.names = F)
 
 ```
