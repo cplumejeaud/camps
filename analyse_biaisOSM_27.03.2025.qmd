@@ -1,0 +1,764 @@
+---
+title: "analyse_biaisOSM_27.03.2025"
+author: "Christine Plumejeaud-Perreau"
+format: html
+editor: visual
+---
+
+**Script analyse du biais de renseignement OSM**
+
+Analyse menée sur les LAU 2020 d'Eurostat. En combinaison avec le code python camp.ipynb qui calcule pour chaque LAU le nombre d'objets OSM présents, par catégorie
+
+# Setting de l'environnement
+
+```{r}
+meslibrairiesR <- "C:/Tools/R/Rlibs4.4"
+# Ajouter meslibrairiesR dans ces chemins : s
+.libPaths(c( .libPaths(), meslibrairiesR) )
+
+R.version #version.string R version 4.2.1 (2022-06-23 ucrt)
+#version.string R version 4.4.2 (2024-10-31 ucrt)
+
+library(tidyverse)
+library(survival)
+library(hms)
+#library(here)
+library(scales)
+library(labelled) #dur
+
+
+library(FactoMineR) #POur faire les ACP, les AFC et les CAH
+library(ade4)
+library(devEMF)
+library(Factoshiny)
+library(explor)
+
+library(RPostgreSQL)
+library(cluster)#R 4.2.3
+library(Hmisc)#R 4.2.3
+
+library(mapsf)
+library(sf)
+
+
+# install.packages("cluster", update = TRUE)
+# 
+# packageurl <- "https://cran.r-project.org/src/contrib/ClusterR_1.3.3.tar.gz"
+# install.packages(packageurl, repos=NULL, type="source")
+# 
+# install.packages("RPostgreSQL", update = TRUE)
+#install.packages("Hmisc", meslibrairiesR)
+
+setwd("C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024")
+
+dir.create(file.path(getwd(), './figuresOSM'))
+
+ici <- file.path(getwd())
+#save.image(file=paste(ici,"export_workspace.RData", sep="/")) 
+
+#rm(camps)
+```
+
+# Analyse du biais de renseignement de OSM
+
+Hypothèse : le nombre d'équipement présents dans les unités administratives (de niveau LAU - commune - ou de niveau NUTS 3 - départements) devrait sensiblement être proportionnel à la densité de population de ces unités.
+
+Elle dépend aussi du pays (en France, une mairie par commune). Mais ailleurs ? Attention, les gares n'irriguent pas tout le territoire. Regarder :
+
+\- mairie, poste et atm
+
+\- services médicaux : medecin, hopital (en zone FUA seulement)
+
+La comparaison portera sur des positions dans les FUA et des degrés d'urbanisation comparables.
+
+Méthode :
+
+Compter le nombre des différents objets dans eurostat_lau_2020 : la maille communale en France, et son équivalent en Europe, version 2020.
+
+Ces mailles ont préalablement été croisées avec le diagnostique d'urbanisation européen (degurba) et avec les FUA (aires urbaines fonctionnelles) pour qualifier leur niveau d'interaction (inclusion par le centroïde). Nous avons ajouté le code pays iso3 aux unités.
+
+-   degurba = 1 (ville); 2(banlieue), 3 (campagne)
+
+-   fua = C si coeur de ville, K si coeur d'une grande ville, F si dans banlieue de ville, H si hors FUA
+
+On peut donc comparer par pays le degré de renseignement à niveau d'urbanité équivalent les décomptes d'objets.
+
+Si leur écart à la moyenne est important, particulièrement sous-évalué, on peut questionner soit une particularité du pays, soit une saisie très incomplète dans OSM. Calcul de l'écart à la moyenne : log10( i / m) où :
+
+-   i = nombre d'objets
+
+-   m = moyenne de ce nombre d'objet dans la même catégorie de FUA, et même niveau d'urbanité.
+
+```{r}
+.rs.restartR() 
+```
+
+```{r}
+setwd("C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024")
+dir.create(file.path(getwd(), './figuresOSM'))
+
+
+## Depuis la BDD
+con <- dbConnect(dbDriver("PostgreSQL"), host='localhost', port='5432', dbname='camps_europe', user='postgres', password='postgres')
+
+#st_asewkt(geom), 
+a1 <- " iso3, coalesce(pop_2020, pop_2019) as pop_2020, area_km2, computed_fua_code, fua, degurba "
+a2 <- " nb_ecole_pt, nb_mairie_pt, nb_poste_pt, nb_avocat_pt, nb_atm_pt  " 
+a3 <- " nb_dentiste_pt,	nb_hopital_pt,	nb_pharmacie_pt,	nb_medecin_clinique_pt"
+a4 <- " nb_arret_bus_pt, nb_gare_pt"
+
+
+ 
+attributes <- paste("select gisco_id, lau_name", a1, a2, a3, a4, sep=",")
+
+clause <- "from demographie.eurostat_lau_2020 p where degurba is not null "
+
+####Lecture
+
+
+osmlau <- dbGetQuery(con, paste(attributes, clause))
+```
+
+```{r}
+osmlau <- data.frame(osmlau) |> 
+  mutate(gisco_id = as.character(gisco_id) ) |>
+  mutate_at(vars(iso3, computed_fua_code, fua, degurba ), list(as.factor)) |>
+  mutate_at(vars( nb_arret_bus_pt, nb_gare_pt, pop_2020, area_km2), list(as.numeric)) |>
+  mutate_at(vars(nb_ecole_pt, nb_mairie_pt, nb_poste_pt, nb_avocat_pt, nb_atm_pt), list(as.numeric)) |>
+  mutate_at(vars( nb_dentiste_pt,	nb_hopital_pt,	nb_pharmacie_pt,	nb_medecin_clinique_pt), list(as.numeric)) 
+```
+
+Arranger quelques variables (nom, ordre des facteurs)
+
+```{r}
+colnames(osmlau) <- str_replace(str_replace(colnames(osmlau), "nb_", ""), "_pt", "")
+osmlau$fua <- factor(osmlau$fua, levels = c("K", "C", "F", "H"))
+```
+
+```{r}
+osmlau <- osmlau |> 
+  mutate (total = ecole + mairie + poste + atm + pharmacie + arret_bus) 
+```
+
+```{r}
+osmlau <- osmlau |> filter(degurba != 9)
+```
+
+##### Calculer les moyennes pour les objets par FUA / degurba et par ISO
+
+```{r}
+osmlau |> group_by(fua, degurba) |>
+    #summarise_at(vars(!!!rlang::syms(myVar)),sum)
+    summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)))
+```
+
+##### Résumés pour 10000 habitants
+
+On divise la somme des objets par la somme des habitants (\*10 000) ce qui donne la moyenne du niveau supérieur.
+
+```{r}
+grille <- osmlau |> filter(degurba != 9) |> group_by(fua, degurba) |>
+  summarise(
+    count = n(),
+    across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) 
+
+mesVars <- c("ecole", "mairie", "poste",  "avocat", "atm", "dentiste", "hopital", "pharmacie", "medecin_clinique", "arret_bus", "gare", "total") # 6:16 si sans iso3
+print(mesVars)
+grilleRelative <- grille |> 
+  mutate(
+    across(
+      all_of(mesVars),
+      \(x) x/pop_2020*10000
+    )
+  ) |>
+  mutate(densite_pop = pop_2020/area_km2)
+  
+
+grille
+grilleRelative
+write.table(grille , "./figuresOSM/grille_countOSM.csv", row.names = F)
+write.table(grilleRelative , "./figuresOSM/grille_countOSM_par10000Habitant.csv", row.names = F)
+```
+
+##### Calculer la déviation à la moyenne globale (par type de FUA et degurba) sur EU
+
+```{r}
+# transformVar non utilisée
+transformVar <- function (x) {
+  orig = deparse(substitute(x));
+  print(orig);
+  #return (x / !! rlang::sym(paste0(orig,".moyEU")));
+}
+
+#Diviser par 10000 habitants puis calculer (x-m)/m *100 avec m = moyenne du groupe
+data <- osmlau |> filter(degurba != 9)|>
+  mutate(
+    across(
+      all_of(mesVars),
+      \(x) x/pop_2020*10000
+    )
+  ) |>
+  mutate(densite_pop = pop_2020/area_km2) |>
+  left_join(grilleRelative, by=c("degurba"="degurba","fua"="fua"), suffix = c("", ".moyEU")) |>
+  mutate(
+    across(
+      all_of(mesVars),
+        ~ (get(cur_column()) - get(paste0(cur_column(),".moyEU"))) / get(paste0(cur_column(),".moyEU"))*100  ,
+        #  ~ . * 2 Appliquer une opération (ici multiplication par 2)
+        .names =  "dev_{col}") # Renommer
+    )  
+
+
+
+```
+
+##### Distributions par FUA et degurba (violins)
+
+```{r}
+
+drawViolinOSM <- function (data, varname, groupe1, groupe2, titreSupp) {
+
+  medians <- data  |>
+    group_by(!! rlang::sym(groupe1), !! rlang::sym(groupe2)) |>
+    summarise(median_value = median(!! rlang::sym(varname), na.rm = T))
+
+  g <- ggplot(data , aes(x = !! rlang::sym(groupe1) , y = !! rlang::sym(varname), 
+                               fill = !! rlang::sym(groupe2))) +
+    geom_violin(position = position_dodge(0.8)) +
+    geom_crossbar(data = medians, aes(x = !! rlang::sym(groupe1), y = median_value, 
+                                      group = !! rlang::sym(groupe2), 
+                                      ymin = median_value, ymax = median_value), 
+                  color = "black", width = 0.8, position = position_dodge(0.8))+ 
+    labs(title = str_interp("Comparaison des distributions OSM de ${varname} \n par ${groupe1}, ${groupe2} ${titreSupp}"),
+         x = groupe1,
+         y = varname) +
+    theme_minimal()
+  
+  print(g)
+  
+  fichier = str_interp("./figuresOSM/ViolinOSM_${varname}_${groupe1}_${groupe2}_${titreSupp}.png")
+  print(fichier)
+  #dev.copy(png,fichier)
+  dev.print(png,filename=fichier, width=7, height=7,units="in",res = 200)
+  dev.off()
+  return (g);
+}
+
+```
+
+##### Distributions par FUA et degurba
+
+Utiliser la fonction
+
+```{r}
+g <- drawViolinOSM(osmlau, "total", "fua", "degurba", NA)
+g <- drawViolinOSM(osmlau |> filter(total < 500), "total", "fua", "degurba", "et (total sous 500)")
+
+g
+
+# drawViolinOSM(data |> filter(total < 500), "total", "fua", "degurba", "sous 500")
+drawViolinOSM(data , "dev_total", "fua", "degurba", "deviation")
+g <- drawViolinOSM(data |> filter(dev_total < 500), "dev_total", "fua", "degurba", "deviation sous 500")
+g
+
+```
+
+##### Calculer la déviation à la moyenne par pays pour chaque unite LAU
+
+```{r}
+
+transformVar1 <- function (orig) {
+  #orig = deparse(substitute(x));
+  print(orig);
+  print(class(orig));
+  vname <- paste0(orig,".moyPays")
+  print(vname);
+  return(vname);
+  #return (x / !! rlang::sym(paste0(orig,".moyEU")));
+  #str_replace(str_replace("{col}", "nb_", "dev_"), "_pt", "")
+}
+
+transformVar2 <- function (x) {
+  #orig = deparse(substitute(x));
+  orig <- x
+  print(orig);
+  vname <- str_replace(orig, "nb_", "dev_")
+  vname <- str_replace(vname, "_pt", "")
+  print(vname);
+  return(vname);
+  #return (x / !! rlang::sym(paste0(orig,".moyEU")));
+  #str_replace(str_replace("{col}", "nb_", "dev_"), "_pt", "")
+}
+
+# Calculer les déviations (on remplace la valeur n (rapporté à pop2020 pour 10000) par sa déviation à la moyenne calculée sur le même type d'environnement urbain)
+
+data <- osmlau |> filter(degurba != 9)|>
+  mutate(
+    across(
+      all_of(mesVars),
+      \(x) x/pop_2020*10000
+    )
+  ) |>
+  mutate(densite_pop = pop_2020/area_km2) |>
+  left_join(grilleRelative, by=c("degurba"="degurba","fua"="fua", "iso3"="iso3"), suffix = c("", ".moyPays")) |>
+  mutate(
+    across(
+      all_of(mesVars),
+        ~ (get(cur_column()) - get(paste0(cur_column(),".moyPays"))) / get(paste0(cur_column(),".moyPays"))*100  ,
+        #  ~ . * 2 Appliquer une opération (ici multiplication par 2)
+        .names =  "dev_{col}" # Renommer 
+    )
+  ) 
+
+
+
+```
+
+#### Sauver les calculs de déviation
+
+Lire les géométries des communes EU
+
+```{r}
+
+#C:\Travail\MIGRINTER\Labo\Louis_Fernier\Analyse_camp_Nov2024\LAU_RG_01M_2020_3857.shp
+lauGeo <- st_read("C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024/LAU_RG_01M_2020_3857.shp", stringsAsFactors = FALSE)
+lauGeo <- st_transform(lauGeo, crs=3857)
+```
+
+```{r}
+filename = "deviation_OSM"
+write.table(data , str_interp("./figuresOSM/${filename}.csv"), row.names = F)
+
+deviationOSM <-  data 
+
+#Ajouter la géométrie à deviationOSM
+deviationOSM <- deviationOSM |> left_join(lauGeo |> select(GISCO_ID, geometry) , by=c("gisco_id" = "GISCO_ID"))
+deviationOSM <- st_as_sf(deviationOSM)
+
+st_write(deviationOSM, str_interp("./figuresOSM/${filename}.gpkg"), append=FALSE)
+
+
+
+```
+
+#### Diagrammes observant la distribution par pays
+
+```{r}
+# Fonction à compiler
+varname = "nb_ecole_pt"
+groupe = "iso3"
+# distance_13_mines_decharges_chantiers
+liste_pays = unique((osmlau |> filter (!is.na(pop_2020)))$iso3)
+## Utiliser la variable ensuite : !! rlang::sym(varname)
+
+drawViolinPerGroupTous <- function (osmlau, varname, groupe, filter, filterValue, titreSupp) {
+  data <- osmlau #|> filter (!is.na(pop_2020))
+  filtreTitre = ""
+  if (!is.na(filterValue)) {
+    filtreTitre = str_interp("filtre sur ${filter} = ${filterValue}")
+    data <- data |> filter (!! rlang::sym(filter) == filterValue)
+    #print(nrow(data))
+    
+  }
+  print(str_interp("Différence ${setdiff(liste_pays, unique(data$iso3))}"));
+  medians <- data  |>
+    group_by(!! rlang::sym(groupe)) |>
+    summarise(median_value = median(!! rlang::sym(varname), na.rm = T)) |>
+    arrange(median_value)
+    
+  data <- data  |>
+    mutate(groupeS = factor(!! rlang::sym(groupe), 
+                            levels = data  |>
+                              group_by(!! rlang::sym(groupe)) |>
+                              summarise(median_value = median(!! rlang::sym(varname), na.rm = T)) |>
+                              arrange(median_value) |>
+                              pull(!! rlang::sym(groupe))))
+  
+  titre <- str_interp("Comparaison des ${varname} entre pays")
+  if (!is.na(titreSupp)) {
+    titre <- str_interp("Comparaison des ${varname} entre pays \n ${filtreTitre} ${titreSupp}")
+  }
+
+  legende = filtreTitre
+  g <- ggplot(data , aes(x = groupeS , y = !! rlang::sym(varname), 
+                               fill = legende)) +
+    geom_violin(position = position_dodge(0.8)) +
+    geom_crossbar(data = medians, aes(x = !! rlang::sym(groupe), y = median_value, 
+                                      ymin = median_value, ymax = median_value), 
+                  color = "black", width = 0.8, position = position_dodge(0.8))+ 
+    labs(title = titre,
+         x = groupe, 
+         y = varname) +
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  
+  print(g)
+  
+  fichier = str_interp("./figuresOSM/Violin_${varname}_${groupe}_${filtreTitre}_${titreSupp}.png")
+  print(fichier)
+  #dev.copy(png,fichier)
+  dev.print(png,filename=fichier, width=7, height=7,units="in",res = 200)
+  dev.off()
+  return (g);
+}
+
+#drawViolinPerGroupTous(osmlau, "total", "iso3", "fua", NA, NA)
+```
+
+colnames(osmlau)
+
+```{r}
+y <- quantile(osmlau$nb_ecole_pt, probs = c(0, 0.05, 0.95, 1), type=4, na.rm=T)
+print(y[3])
+colnames(osmlau)
+drawViolinPerGroupTous(osmlau |> filter(nb_ecole_pt < 20 & degurba==1), "nb_ecole_pt", "iso3", "fua", "C", "filter(nb_ecole_pt sous 20 et degurba==1)")
+
+drawViolinPerGroupTous(osmlau |> filter(nb_mairie_pt < 20 & degurba==1), "nb_mairie_pt", "iso3", "fua", "C", "filter(nb_mairie_pt sous 20 et degurba==1)")
+
+drawViolinPerGroupTous(osmlau |> filter( degurba==1), "nb_atm_pt", "iso3", "fua", "C", "filter( degurba==1)")
+```
+
+En observant la médiane, on a le biais du nombre d'unités statistiques.
+
+##### **Plutot visualiser une regression entre nb_ecole_pt et densité de population. Et regarder si iso3 joue un rôle majeur.**
+
+```{r}
+osmlau <- osmlau |> mutate(densite_pop = pop_2020/area_km2)
+
+#osmvars = colnames(osmlau[, 9:19])
+for (v in mesVars) {
+  g <- ggplot(osmlau, aes(x = densite_pop, y = !! rlang::sym(v), color = fua)) +
+    geom_point(size = 3, alpha = 0.7) +  # Taille et transparence des points
+    labs(title = "Relation entre densité de population et densité d'objets OSM",
+         x = "Densité de population",
+         y = v) +
+    theme_minimal()  
+  
+  
+    fichier = str_interp("./figuresOSM/Relation_densite_pop_${v}.png")
+    print(fichier)
+  print(g)
+    #dev.copy(png,fichier)
+    dev.print(png,filename=fichier, width=7, height=7,units="in",res = 200)
+    dev.off()
+}
+```
+
+```{r}
+drawViolinPerGroupTous(osmlau |> filter( degurba==1 & densite_pop > 5000 &  nb_ecole_pt < 100), "nb_ecole_pt", "iso3", "fua", "C", "degurba==1 et densite_pop sup 5000 et nb_ecole sous 100")
+```
+
+#### Utiliser les données calculées de déviation à la moyenne (par fua et degurba) pour chaque pays
+
+##### Tracer les diagrammes par variables
+
+Pays sans diagnostique FUA : c("ALB", "MKD", "SRB", "LIE")"
+
+Pas de zone F pour FUA dans c("SVN", "CYP", "EST", "LTU")
+
+Pas de zone H pour FUA dans c("LUX")
+
+##### **Deviations sur les écoles**
+
+```{r}
+drawViolinPerGroupTous(data, "dev_ecole", "iso3", "fua", NA, "dev. moy. EU sans filtre sur degurba") #
+
+drawViolinPerGroupTous(data |> filter(degurba==1), "dev_ecole", "iso3", "fua", "C", "dev. moy. EU (degurba = 1)")
+
+
+drawViolinPerGroupTous(data |> filter(degurba==3), "dev_ecole", "iso3", "fua", "F", "dev. moy. EU (degurba = 3)")
+
+drawViolinPerGroupTous(data |> filter(degurba==2), "dev_ecole", "iso3", "fua", "H", "dev. moy. EU (degurba = 2)")
+
+drawViolinPerGroupTous(data |> filter(degurba==3), "dev_ecole", "iso3", "fua", "H", "dev. moy. EU (degurba = 3)")
+
+drawViolinPerGroupTous(data |> filter(degurba==1), "dev_ecole", "iso3", "fua", "K", "dev. moy. EU (degurba = 1)")
+```
+
+##### **Deviations sur les atm (guichets bancaires)**
+
+```{r}
+
+drawViolinPerGroupTous(osmlau |> filter(nb_atm_pt>0), "nb_atm_pt", "iso3", "fua", NA, "comptes sans filtre")
+
+drawViolinPerGroupTous(data, "nb_atm_pt", "iso3", "fua", "C", "dev. moy. EU sans filtre sur degurba") #
+
+drawViolinPerGroupTous(data |> filter(degurba==1), "nb_atm_pt", "iso3", "fua", "C", "dev. moy. EU (degurba = 1)")
+
+
+drawViolinPerGroupTous(data |> filter(degurba==3), "nb_atm_pt", "iso3", "fua", "F", "dev. moy. EU (degurba = 3)")
+
+drawViolinPerGroupTous(data |> filter(degurba==2), "nb_atm_pt", "iso3", "fua", "H", "dev. moy. EU (degurba = 2)")
+
+drawViolinPerGroupTous(data |> filter(degurba==3), "nb_atm_pt", "iso3", "fua", "H", "dev. moy. EU (degurba = 3)")
+
+drawViolinPerGroupTous(data |> filter(degurba==1), "nb_atm_pt", "iso3", "fua", "K", "dev. moy. EU (degurba = 1)")
+
+
+
+
+```
+
+```{r}
+drawViolinPerGroupTous(data |> filter(nb_atm_pt>0), "nb_atm_pt", "iso3", "fua", "C", "déviation à la moyenne européenne strictement positive") #manque  c(\"ALB\", \"MKD\", \"ISL\", \"SRB\", \"LIE\")
+
+drawViolinPerGroupTous(data |> filter(nb_ecole_pt>0), "nb_ecole_pt", "iso3", "fua", "C", "déviation à la moyenne européenne strictement positive") #manque c(\"ALB\", \"MKD\", \"ISL\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_pharmacie_pt>0), "nb_pharmacie_pt", "iso3", "fua", "C", "déviation à la moyenne européenne strictement positive") #manque c(\"ALB\", \"MKD\", \"ISL\", \"SRB\", \"LIE\")"
+```
+
+##### Regarder atm, ecole, pharmacie, et arret_bus
+
+```{r}
+drawViolinPerGroupTous(data |> filter(nb_atm_pt>0 & degurba==1), "nb_atm_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==1)") #manque  c(\"SVN\", \"CYP\", \"SVK\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_ecole_pt>0 & degurba==1), "nb_ecole_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==1)") #manque c(\"SVN\", \"CYP\", \"SVK\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_pharmacie_pt>0 & degurba==1), "nb_pharmacie_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==1)") #manque c(\"SVN\", \"CYP\", \"SVK\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_arret_bus_pt>0 & degurba==1), "nb_arret_bus_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==1)") #manque c(\"SVN\", \"CYP\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+#degurba = 2
+
+drawViolinPerGroupTous(data |> filter(nb_atm_pt>0 & degurba==2), "nb_atm_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==2)") #manque  c(\"SVN\", \"CYP\", \"SVK\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")""
+
+drawViolinPerGroupTous(data |> filter(nb_ecole_pt>0 & degurba==2), "nb_ecole_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==2)") #manque c(\"SVN\", \"CYP\", \"SVK\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_pharmacie_pt>0 & degurba==2), "nb_pharmacie_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==2)") #manque c(\"SVN\", \"CYP\", \"SVK\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_arret_bus_pt>0 & degurba==2), "nb_arret_bus_pt", "iso3", "fua", "F", "déviation (moyEu) strict. positive (degurba==2)") #manque c(\"SVN\", \"CYP\", \"SVK\", \"ALB\", \"MKD\", \"ISL\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+
+#degurba = 2
+
+
+drawViolinPerGroupTous(data |> filter(nb_atm_pt>0 & degurba==2), "nb_atm_pt", "iso3", "fua", "C", "déviation (moyEu) strict. positive (degurba==2)") #manque  c(\"CZE\", \"CHE\", \"GRC\", \"FRA\", \"HUN\", \"DEU\", \"FIN\", \"SVN\", \"CYP\", \"SVK\", \"AUT\", \"ESP\", \"ALB\", \"ROU\", \"MLT\", \"LVA\", \"DNK\", \"BEL\", \"NLD\", \"MKD\", \"SWE\", \"ISL\", \"NOR\", \"BGR\", \"IRL\", \"HRV\", \"LUX\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_ecole_pt>0 & degurba==2), "nb_ecole_pt", "iso3", "fua", "C", "déviation (moyEu) strict. positive (degurba==2)") #manque c(\"CHE\", \"GRC\", \"FRA\", \"HUN\", \"DEU\", \"FIN\", \"SVN\", \"CYP\", \"SVK\", \"AUT\", \"ESP\", \"ALB\", \"ROU\", \"MLT\", \"LVA\", \"DNK\", \"BEL\", \"NLD\", \"MKD\", \"SWE\", \"ISL\", \"NOR\", \"BGR\", \"IRL\", \"HRV\", \"LUX\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_pharmacie_pt>0 & degurba==2), "nb_pharmacie_pt", "iso3", "fua", "C", "déviation (moyEu) strict. positive (degurba==2)") #manque c(\"CZE\", \"CHE\", \"GRC\", \"FRA\", \"HUN\", \"DEU\", \"FIN\", \"SVN\", \"CYP\", \"SVK\", \"AUT\", \"ESP\", \"ALB\", \"ROU\", \"MLT\", \"LVA\", \"DNK\", \"BEL\", \"NLD\", \"MKD\", \"SWE\", \"ISL\", \"NOR\", \"BGR\", \"IRL\", \"HRV\", \"LUX\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+drawViolinPerGroupTous(data |> filter(nb_arret_bus_pt>0 & degurba==2), "nb_arret_bus_pt", "iso3", "fua", "C", "déviation (moyEu) strict. positive (degurba==2)") #manquec(\"CHE\", \"GRC\", \"FRA\", \"HUN\", \"DEU\", \"FIN\", \"SVN\", \"CYP\", \"SVK\", \"AUT\", \"ESP\", \"ALB\", \"ROU\", \"MLT\", \"LVA\", \"DNK\", \"BEL\", \"NLD\", \"MKD\", \"SWE\", \"ISL\", \"NOR\", \"BGR\", \"IRL\", \"HRV\", \"LUX\", \"EST\", \"LTU\", \"SRB\", \"LIE\")"
+
+## degurba == 1
+
+```
+
+##### **Regarder la distribution des écarts de total par pays**
+
+```{r}
+
+drawViolinPerGroupTous(data |> filter(total>0 ), "dev_total", "iso3", "degurba", NA, "déviation (moyEu) strict. positive ") 
+
+drawViolinPerGroupTous(data |> filter(total>0 ), "dev_total", "iso3", "degurba", "1", "déviation (moyEu) strict. positive ") 
+
+drawViolinPerGroupTous(data |> filter(total>0 ), "dev_total", "iso3", "degurba", "2", "déviation (moyEu) strict. positive ") 
+
+drawViolinPerGroupTous(data |> filter(total>0 ), "dev_total", "iso3", "degurba", "3", "déviation (moyEu) strict. positive ") 
+
+```
+
+### Cartographie (cartes de déviation) pour OSM
+
+```{r}
+deviationOSM <-  data 
+dim(deviationOSM)
+colnames(deviationOSM)
+```
+
+#### Carte par rapport à la moyenne EU par pays
+
+Lire les pays
+
+```{r}
+countries <- st_read("D:/Data/natural_earth_vector/10m_cultural/ne_10m_admin_0_countries.shp", stringsAsFactors = FALSE)
+
+countries <- st_transform(countries, crs=3857)
+```
+
+##### Lire les géométries des communes EU
+
+```{r}
+#C:\Travail\MIGRINTER\Labo\Louis_Fernier\Analyse_camp_Nov2024\LAU_RG_01M_2020_3857.shp
+lauGeo <- st_read("C:/Travail/MIGRINTER/Labo/Louis_Fernier/Analyse_camp_Nov2024/LAU_RG_01M_2020_3857.shp", stringsAsFactors = FALSE)
+lauGeo <- st_transform(lauGeo, crs=3857)
+```
+
+```{r}
+deviationOSM <-  data 
+
+#Ajouter la géométrie à deviationOSM
+deviationOSM <- deviationOSM |> left_join(lauGeo |> select(GISCO_ID, geometry) , by=c("gisco_id" = "GISCO_ID"))
+deviationOSM <- st_as_sf(deviationOSM)
+
+deviationOSM <- deviationOSM |> filter (iso3 %in% c('PRT') & is.na(str_match(deviationOSM$gisco_id, pattern='PT_310')) & is.na(str_match(deviationOSM$gisco_id, pattern='PT_4')) & gisco_id != 'PT_310310')
+
+print(dim(deviationOSM))
+```
+
+###### Choose the bbox to set focus on :
+
+```{r}
+#http://api.openstreetmap.fr/xapi?*[key=value][bbox=-9.75459,36.76205,-6.10713,42.24992]
+bbox_coords <- c(-9.75459,36.76205,-6.10713,42.24992)
+names(bbox_coords) = c("xmin","ymin","xmax","ymax")
+bboxFocus = st_as_sfc(st_bbox(bbox_coords), crs=4326)
+bboxFocus <- bboxFocus |> 
+  st_set_crs(4326)  |> 
+  st_transform(bboxFocus, crs=3857)
+```
+
+```{r}
+library(mapsf)
+
+
+export = FALSE
+if (export == T) {
+  mf_export(
+    bboxFocus ,
+    filename = "./figuresOSM/map_PRT.png",
+    width = 1000,
+    height = 700,
+    res = 96,
+    expandBB = rep(0, 4),
+    theme = mf_theme("nevermind", bg = "lightblue1") 
+  )
+} else {
+  mf_theme("nevermind", bg = "lightblue1")
+  # Pays (polygones, fond transparent) - centrer sur Europe
+  mf_map(x = bboxFocus, lwd = 0.1, col = NA)
+}
+
+# plot a shadow
+#mf_map(x = countries, lwd = 0.1, col = "grey50", add = TRUE)
+#mf_shadow(countries,  col = "white", cex = 0.5, add = TRUE) 
+
+# Pays (polygones, fond blanc)
+mf_map(x = countries, lwd = 0.5, border = "grey50", col = "white", add = TRUE)
+
+#Tous les LAU, même ceux non analysés
+#mf_map(x = deviationOSM, type = "base", pch = 18, cex = 0.7, col = "black", add = TRUE)
+
+# plot  déviation des unités
+mf_map(
+  x = deviationOSM  ,
+  var = "dev_total",
+  type = "choro",
+  pal = "Blue-Red", #diverging Dark Mint
+  breaks = "quantile",
+  nbreaks = 6,
+  border = NA,
+  #pch = 20,
+  #cex = 1, 
+  # val_order = c(
+  #  "urbain 11 - grande ville",
+  #  "urbain 12 - banlieue de ville moyenne",
+  #  "rural 21 ",
+  #  "rural 22 - très isolé"
+  # ),
+  leg_pos = "topleft",
+  leg_adj = c(0, -0.5),
+  leg_title = "Ecart OSM à la moyenne EU", 
+  add = TRUE
+)
+
+# Ajout de l'espace schengen
+mf_map(
+  x = schengen ,
+  var = "id",
+  type = "typo",
+  pal = c("darkblue", "blue"),
+  lwd = c(2, 0.7),
+  #border = NA,
+  #pch = 20,
+  #lwd = c(1.5, 1),
+  #lty = c(2, 1),
+  val_order = c( 1, 2 ),
+  leg_pos = "topleft",
+  leg_adj = c(0, -20),
+  leg_title = "Espace Schengen (jan. 2025)", 
+  add = TRUE
+)
+# Ajout d'un titre
+mf_title(txt = "Disparités OSM en Europe")
+# Crédits
+mf_credits("Auteurs : Christine Plumejeaud-Perreau, 2025",
+           pos = "rightbottom")
+#Etiquettes
+mf_label(
+  x = countriesLabels, # filter(countries,  ADM0_A3 %in% c('TUR', 'ESP', 'IRL', 'DNK', 'BIH', 'UKR') ), #ADM0_DIF == 0
+  var = "ADMIN",
+  cex = .7,
+  col= "black",
+  halo = TRUE,
+  bg = "white",
+  overlap = FALSE,
+  lines = FALSE
+)
+mf_scale(pos = "bottomleft",  crs_units = "m", scale_units = 'km', size=500)
+
+#dev.off()
+
+```
+
+## Plus simple : analyse par pays
+
+Créer un indicateur synthétique représentatif de la saisie.
+
+```{r}
+osmlau <- osmlau |> 
+  mutate (nb_total = nb_ecole_pt + nb_mairie_pt + nb_poste_pt + nb_atm_pt + nb_pharmacie_pt + nb_arret_bus_pt) 
+#  mutate (shannon = -sum((nb_total / sum(nb_total)) * log(nb_total / sum(nb_total))))
+#shannon <- -sum((data / sum(data)) * log(data / sum(data)))
+
+
+```
+
+```{r}
+summary(osmlau$total)
+
+```
+
+##### Des histogrammes de total
+
+```{r}
+ggplot(osmlau , aes(x = log10(total))) +
+  geom_histogram(binwidth = 0.1, fill = "skyblue") +
+  scale_x_continuous(limits = c(0, 10)) +  # Limiter l'axe X à 30
+  scale_y_continuous(limits = c(0, 10000)) +  # Limiter l'axe X entre 30 et 70
+  labs(title = "Histogramme de log base 10 de total",
+       x = "Valeurs",
+       y = "Fréquence") +
+  theme_minimal()
+
+ggplot(osmlau , aes(x = total)) +
+  geom_histogram(binwidth = 1, fill = "skyblue") +
+  scale_x_continuous(limits = c(0, 50)) +  # Limiter l'axe X à 30
+  scale_y_continuous(limits = c(0, 10000)) +  # Limiter l'axe X entre 30 et 70
+  labs(title = "Histogramme de total, si total < 30",
+       x = "Valeurs",
+       y = "Fréquence") +
+  theme_minimal()
+```
+
+##### Des analyses par pays des manquants (total = 0)
+
+```{r}
+
+analyse <- osmlau |> filter(total == 0) |> 
+  group_by( iso3)|> 
+  summarise(count0 = n(), 
+           densite_moyenne0 = mean(pop_2020/area_km2, na.rm = T))|> 
+  arrange(count0)
+
+analyseTout <- osmlau |> 
+  group_by( iso3)|> 
+  summarise(count = n(), 
+            pop_total = sum(pop_2020, na.rm = T), 
+            densite_moyenne = mean(pop_2020/area_km2, na.rm = T),
+            vrai_densite = sum(pop_2020, na.rm = T)/sum(area_km2, na.rm = T)) |> 
+  left_join(analyse, by = c("iso3" = "iso3")) |>
+  mutate(part_manquante = count0/count * 100)|>
+  arrange(part_manquante) 
+
+
+```
