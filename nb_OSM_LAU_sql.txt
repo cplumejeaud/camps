@@ -1,0 +1,246 @@
+-----------------------------------------------------------------------------------------------------------------
+-- Auteur : Christine PLUMEJEAUD-PERREAU, UMR 7301 Migrinter
+-- Date : 27/02/2025
+-- Projet : thèse de Louis Fernier
+-- MISE à jour décomptes des entités OSM dans l'enveloppe des communes LAU en Europe
+-----------------------------------------------------------------------------------------------------------------
+
+-- note : un batiment (polygon) peut être à cheval sur deux communes, il est compté deux fois. Moins grave que de ne pas le voir avec st_contains
+
+
+update demographie.eurostat_lau_2020 lau set nb_ecole = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (amenity in ('school', 'college') or building in ('school', 'college') ) and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (amenity in ('school', 'college') or building in ('school', 'college')) and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		-- note : le batiment peut être à cheval sur deux communes, il est compté deux fois. Moins grave que de ne pas le voir avec st_contains
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+update demographie.eurostat_lau_2020 lau set nb_poste = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (amenity in ('post_box', 'post_office')) and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (amenity in ('post_box', 'post_office')) and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+
+update demographie.eurostat_lau_2020 lau set nb_avocat = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (office = 'lawyer' )  and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (office = 'lawyer') and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+
+update demographie.eurostat_lau_2020 lau set nb_dentiste = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (office = 'dentist' )  and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (office = 'dentist') and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+
+update demographie.eurostat_lau_2020 lau set nb_atm = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (office = 'atm' )  and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (office = 'atm') and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+
+update demographie.eurostat_lau_2020 lau set nb_hopital = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (amenity in ('hospital', 'clinic') or building in ('hospital', 'clinic') )  and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (amenity in ('hospital', 'clinic') or building in ('hospital', 'clinic') ) and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+update demographie.eurostat_lau_2020 lau set nb_pharmacie = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (amenity in ('pharmacy') or shop in ('chemist', 'medical_supply') )  and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (amenity in ('pharmacy') or shop in ('chemist', 'medical_supply') ) and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+update demographie.eurostat_lau_2020 lau set nb_arret_bus = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (amenity in ('bus_station') or highway='bus_stop' or public_transport='platform' or  railway='platform')  and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (amenity in ('bus_station') or highway='bus_stop' or public_transport='platform' or  railway='platform') and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+update demographie.eurostat_lau_2020 lau set nb_gare = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (railway='station' or railway='halt' or building='train_station' or  public_transport='station' )  and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (railway='station' or railway='halt' or building='train_station' or  public_transport='station') and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+update demographie.eurostat_lau_2020 lau set nb_medecin_clinique = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (amenity in ('clinic', 'doctors') or building in ('clinic', 'healthcare'))   and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (amenity in ('clinic', 'doctors') or building in ('clinic', 'healthcare')) and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
+update demographie.eurostat_lau_2020 lau set nb_mairie = k.c1
+from ( 
+	select ogc_fid , sum(c) as c1 from (
+		select lau.ogc_fid, count(*) as c
+		from public.osm_point osm, demographie.eurostat_lau_2020 lau
+		where (amenity='townhall' or building = 'townhall')   and lau.iso3 in ('{0}')
+		and st_contains(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		UNION
+		(
+		select lau.ogc_fid, count(*) as c
+		from public.osm_polygon osm , demographie.eurostat_lau_2020 lau
+		where (amenity='townhall' or building = 'townhall' ) and lau.iso3 in ('{1}') 
+		and st_intersects(lau.wkb_geometry, osm.way)
+		group by lau.ogc_fid
+		)
+	) as u 
+	group by ogc_fid
+) as k 
+where k.ogc_fid = lau.ogc_fid ;
+
