@@ -78,7 +78,15 @@ Lier les sources à un répertoire fictif apache
 DNS : eurocamps.plumegeo.fr
 créer un mapping sur votre fournisseur de DNS : CNAME avec romarin.huma-num.fr.
 
-Il faut reporter ces infos dans le fichier de config **eurocamps.conf** ci-dessous
+Sur le serveur, éditer le fichier Code_projet_Vfinale.py pour modifier le chemin vers les données (camps8_18-03-2025-sansNAniOUTLIERS.csv et le shapefile Espace_Schengen_ligne.shp)
+`vi Code_projet_Vfinale.py`
+
+```sh
+FILE_PATH = r"/var/www/eurocamps/camps8_18-03-2025-sansNAniOUTLIERS.csv"
+SHAPEFILE_PATH = r"/var/www/eurocamps/Espace_Schengen_ligne/Espace_Schengen_ligne.shp"
+```
+
+Editer fichier de config **eurocamps.conf** ci-dessous
 
 `sudo vi /etc/apache2/sites-available/eurocamps.conf`
 ```sh
