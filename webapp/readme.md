@@ -15,6 +15,6 @@ Le code source est disponible sur le github de l'enseignante, sous licence Affer
 
 ## Allure de l'application
 
-![Interface_2025-12-05 142231](Interface_2025-12-05 142231.png)
+![Interface_2025-12-05 142231](./Interface_2025-12-05 142231.png)
 
 Attention "Ajouter un nouveau camps" ne marche pas. Ce sera modifié plus tard.
