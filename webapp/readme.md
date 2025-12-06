@@ -10,5 +10,11 @@ enseignante de l'UE par des étudiants du Master 2 SPE :
   <li>Joseph Fournier.</li>
 </ul>
 <br>C'est un <b>prototype</b> visant à démontrer les capacités d'exploration et visualisation des profils des camps avec Python (3.10). 
-Il nécessite des améliorations pour une utilisation en production (en particulier pour le formulaire de saisie de nouveau camps qui ne fonctionne pas). 
+Il nécessite des améliorations pour une utilisation en production (en particulier pour le formulaire de saisie de nouveaux camps qui ne fonctionne pas). 
 Le code source est disponible sur le github de l'enseignante, sous licence Affero GPL v3.
+
+## Allure de l'application
+
+![Interface_2025-12-05 142231](Interface_2025-12-05 142231.png)
+
+Attention "Ajouter un nouveau camps" ne marche pas. Ce sera modifié plus tard.
