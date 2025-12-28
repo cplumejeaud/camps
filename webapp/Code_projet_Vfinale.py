@@ -2,13 +2,14 @@
 # Code_projet_V4.py – Version finale avec radar adaptatif + bouton vider
 # ============================================
 
-from flask import Flask, render_template_string, request, redirect, url_for, jsonify
+from flask import Flask, render_template_string, request, redirect, url_for, jsonify, session
 import pandas as pd
 import folium
 import plotly.graph_objects as go
 import numpy as np
 import geopandas as gpd
 import os
+import random
 from folium.plugins import VectorGridProtobuf
 from flask_cors import CORS, cross_origin
 # import error handling file from where you have defined it
@@ -18,6 +19,7 @@ import error
 #https://stackoverflow.com/questions/25594893/how-to-enable-cors-in-flask
 
 app = Flask(__name__)
+app.secret_key = 'your-secret-key-here-change-in-production'  # Required for session
 CORS(app) # This will enable CORS for all routes
 error.init_handler(app) # initialise error handling 
 
@@ -64,6 +66,7 @@ def load_shapefile(filepath):
     return gdf
 
 df = load_data()
+new_camps = pd.DataFrame(columns=df.columns.tolist())  # DataFrame pour les nouveaux camps ajoutés
 gdf_schengen = load_shapefile(SHAPEFILE_PATH)
 gdf_countries = load_shapefile(COUNTRIES_PATH)
 #https://python-visualization.github.io/folium/latest/user_guide/plugins/vector_tiles.html
@@ -116,7 +119,8 @@ def safe_float(value, default=0.0):
 # ============================================
 # CARTE FOLIUM
 # ============================================
-def create_camps_map(dataframe):
+def create_camps_map(dataframe, newcamps):
+       
     df_clean = dataframe.dropna(subset=['camp_latitude', 'camp_longitude']).copy().reset_index(drop=True)
     if df_clean.empty:
         return "<p>Aucune donnée de localisation disponible</p>"
@@ -124,12 +128,11 @@ def create_camps_map(dataframe):
     center_lat = df_clean['camp_latitude'].mean()
     center_lon = df_clean['camp_longitude'].mean()
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=5)
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=5, max_bounds=True)
 
     #folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     #                 attr='Esri', name='Satellite', overlay=False).add_to(m)
     folium.TileLayer('CartoDB positron', name='Positron').add_to(m)
-    #folium.TileLayer('OpenStreetMap', name='OSM').add_to(m)
 
     for idx, row in df_clean.iterrows():
         #Attention, ce n'était pas degurba qu'il fallait cartographié (changer le fichier source)
@@ -168,10 +171,8 @@ def create_camps_map(dataframe):
                    style_function=lambda x: {'fillColor':'none', 'color':'blue', 'weight':2}).add_to(m)
 
     folium.GeoJson(gdf_countries, name="Countries (natural earth)",
-                   style_function=lambda x: {'fillColor':'none', 'color':'black', 'weight':1}).add_to(m)
-
-
-     
+                   style_function=lambda x: {'fillColor':'none', 'color':'black', 'weight':1}, show=False).add_to(m)
+    
     styles = {
         "cities": {
             "fill": True,
@@ -212,25 +213,50 @@ def create_camps_map(dataframe):
         "vectorTileLayerStyles": vectorTileLayerStyles
     }
 
-    VectorGridProtobuf(url, "cities (FUA 2020)", options).add_to(m)
+    VectorGridProtobuf(url, "cities (FUA 2020)", options, show=False).add_to(m)
 
     vectorTileLayerStyles2 = {}
     vectorTileLayerStyles2["degurba01"] = styles["degurba01"]
     vectorTileLayerStyles2["degurba02"] = styles["degurba02"]
     vectorTileLayerStyles2["degurba03"] = styles["degurba03"]
-    print(vectorTileLayerStyles2)
+    #print(vectorTileLayerStyles2)
     url = "http://vtiles.plumegeo.fr/degurba/{z}/{x}/{y}.pbf"
     options = {
         "vectorTileLayerStyles": vectorTileLayerStyles2
     }
 
-    VectorGridProtobuf(url, "DEGURBA (Eurostat 2018)", options).add_to(m)
+    VectorGridProtobuf(url, "DEGURBA (Eurostat 2018)", options, show=False).add_to(m)
 
+    # Nouveaux camps ajoutés via le formulaire
+    newcamps_clean = newcamps.dropna(subset=['camp_latitude', 'camp_longitude']).copy().reset_index(drop=True)
+    if not newcamps_clean.empty:
+        print(newcamps_clean.shape)
+        print(newcamps_clean.columns)
+        for idx, row in newcamps_clean.iterrows():
+            color = "blue"
+            icon_html = f"""<div style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:14px solid {color};border-bottom-color:{color};box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>"""
+            icon = folium.DivIcon(html=icon_html, icon_size=(10,10), icon_anchor=(7,7))
+
+            camp_name = row.get('nom_unique', 'Camp inconnu').replace("'", "\\'")
+
+            popup_html = f"""
+                <div style="font-family:Arial,sans-serif;min-width:200px;">
+                    <b style="font-size:14px;">{row.get('nom_unique', 'N/A')}</b><br>
+                    <span style="color:#666;">Type: {row.get('type_camp', 'N/A')}</span><br>
+                </div>
+                """
+            folium.Marker(
+                location=[row['camp_latitude'], row['camp_longitude']],
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=row.get('nom_unique', 'Camp non vérifié'),
+                icon=icon
+            ).add_to(m)
 
     folium.LayerControl().add_to(m)
     m.get_root().html.add_child(folium.Element(create_legend_html()))
 
-    return m._repr_html_()
+    #return m._repr_html_()
+    return m
 
 def create_legend_html():
     """Crée le HTML de la légende"""
@@ -372,9 +398,15 @@ def create_global_radar_chart(dataframe):
 # ROUTES
 # ============================================
 @app.route("/")
-@cross_origin()
 def index():
-    map_html = create_camps_map(df)
+    map = create_camps_map(df, new_camps)
+
+    # map.get_root().render()
+    # mapheader = map.get_root().header.render()
+    # mapbody_html = map.get_root().html.render()
+    # mapscript = map.get_root().script.render()
+    map_html = map._repr_html_()
+
     radar_html = create_global_radar_chart(df)
 
     template = """
@@ -383,7 +415,7 @@ def index():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Analyse Géographique des Camps de migrants en Europe</title>
+        <title>Analyse Géographique des Camps de Migrants en Europe</title>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
@@ -394,19 +426,23 @@ def index():
             .header {background:linear-gradient(135deg,#2d3748,#1a202c); color:white; padding:40px; text-align:center;}
             .header h1 {font-size:2.5em; margin-bottom:10px;}
             .content {display:grid; grid-template-columns:33.33% 66.67%; gap:30px; padding:40px;}
-            .section {background:#f8f9fa; border-radius:15px; padding:25px; box-shadow:0 4px 15px rgba(0,0,0,0.08);}
+            .section {background:#f8f9fa; border-radius:15px; padding:15px; box-shadow:0 4px 15px rgba(0,0,0,0.08);}
             .section h2 {color:#2d3748; font-size:1.5em; margin-bottom:20px; display:flex; align-items:center; gap:10px;}
             .section h2::before {content:''; width:4px; height:24px; background:linear-gradient(#667eea,#764ba2); border-radius:2px;}
             .radar-section {grid-column:1; grid-row:1;}
-            .button-section {grid-column:1; grid-row:2; display:flex; flex-direction:column; gap:20px;}
-            .map-section {grid-column:2; grid-row:1 / 3;}
-            #map {height:100%; min-height:700px; border-radius:10px;}
+            .button-section {grid-column:2; grid-row:2; display:flex; flex-direction:column; gap:20px;}
+            .map-section {grid-column:2; grid-row:1; overflow: hidden;}
+            #map {height:100%; min-height:500px; border-radius:10px;}
             #radarChart {height:420px; width:100%;}
-            .btn-add, .btn-clear {padding:18px; background:linear-gradient(135deg,#1f77b4,#125b86); color:white; border-radius:12px;
+            .btn-add, .btn-about, .btn-clear {padding:18px; background:linear-gradient(135deg,#1f77b4,#125b86); color:white; border-radius:12px;
                       text-align:center; text-decoration:none; font-weight:600; font-size:18px; box-shadow:0 4px 15px rgba(31,119,180,0.3); cursor:pointer;}
             .btn-clear {background:linear-gradient(135deg,#dc2626,#991b1b);}
-            .btn-add:hover, .btn-clear:hover {transform:translateY(-3px); box-shadow:0 8px 25px rgba(0,0,0,0.4);}
+            .btn-add:hover, .btn-about:hover, .btn-clear:hover {transform:translateY(-3px); box-shadow:0 8px 25px rgba(0,0,0,0.4);}
             .camp-info {background:#e3f2fd; padding:15px; border-radius:8px; margin-bottom:15px; border-left:4px solid #1f77b4;}
+            .modal {display:none; position:fixed; z-index:1000; left:0; top:0; width:100%; height:100%; background-color:rgba(0,0,0,0.5);}
+            .modal-content {background-color:white; margin:15% auto; padding:20px; border-radius:10px; width:80%; max-width:500px; position:relative;}
+            .close {color:#aaa; float:right; font-size:28px; font-weight:bold; cursor:pointer;}
+            .close:hover {color:black;}
             @media (max-width:1200px){
                 .content {grid-template-columns:1fr;}
                 .radar-section{grid-row:2;} .button-section{grid-row:3;} .map-section{grid-row:1;}
@@ -416,7 +452,7 @@ def index():
     <body>
         <div class="container">
             <div class="header">
-                <h1>Analyse Géographique des Camps de migrants en Europe</h1>
+                <h1>Analyse Géographique des Camps de Migrants en Europe</h1>
                 <p>Cartographie interactive et analyse des distances aux infrastructures essentielles</p>
             </div>
             <div class="content">
@@ -435,16 +471,36 @@ def index():
                 <div class="section button-section">
                     <h2>Actions</h2>
                     <a class="btn-add" href="{{ url_for('add_camp') }}">Ajouter un nouveau camp</a>
+                    <button class="btn-about" onclick="showAboutModal()">À propos</button>
                 </div>
 
                 <div class="section map-section">
                     <h2>Carte Interactive</h2>
-                    <div id="map">{{ map_html|safe }}</div>
+                    <div id="map">{{ map_html|safe }} </div> 
                 </div>
             </div>
         </div>
 
+        <!-- Modal À propos -->
+        <div id="aboutModal" class="modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeAboutModal()">&times;</span>
+                <h2>À propos</h2>
+                
+                <p>Cette application propose une visualisation interactive des camps en Europe, base de données complétée et qualifiée de mars 2025, en collaboration avec Louis Fernier, doctorant à Migrinter.
+                <br>
+                L'application a été développée dans le cadre du Master 2 SPE à La Rochelle, UE Data to Information, en décembre 2025, sous la responsabilité de Christine Plumejeaud-Perreau, enseignante de l'UE par des étudiants du Master 2 SPE :
+                <ul><li>Damien Glo</li><li>Killian Lheote</li><li>Joseph Fournier.</li>    
+                </ul>
+                <br>
+                C'est un prototype visant à démontrer les capacités d'exploration et visualisation des profils des camps avec Python (3.10). Il nécessite des améliorations pour une utilisation en production (en particulier pour le formulaire de saisie de nouveaux camps qui ne fonctionne pas). <br>
+                </p>
+                <p>Développé avec Flask, Folium, et Plotly, le code source est disponible sur le github de l'enseignante, sous licence Affero GPL v3.</p>
+            </div>
+        </div>
+
         <script>
+
             const visibleCamps = new Set();
             let originalMaxRange = 50; // Valeur par défaut, sera mise à jour au chargement
 
@@ -592,10 +648,26 @@ def index():
                 clearTimeout(updateTimeout);
                 updateTimeout = setTimeout(updateRadarScale, 300);
             });
+
+            // Modal functions
+            function showAboutModal() {
+                document.getElementById('aboutModal').style.display = 'block';
+            }
+            function closeAboutModal() {
+                document.getElementById('aboutModal').style.display = 'none';
+            }
+            // Close modal when clicking outside
+            window.onclick = function(event) {
+                const modal = document.getElementById('aboutModal');
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            }
         </script>
     </body>
     </html>
     """
+    #return render_template_string(template, mapheader=mapheader, mapbody_html=mapbody_html, mapscript=mapscript, radar_html=radar_html)
     return render_template_string(template, map_html=map_html, radar_html=radar_html)
 
 @app.route("/get_camp_data/<int:camp_id>")
@@ -617,6 +689,12 @@ def get_camp_data(camp_id):
 # --- Formulaire pour ajouter un nouveau camp ---
 @app.route("/add_camp", methods=["GET"])
 def add_camp():
+    # Generate captcha
+    num1 = random.randint(1, 10)
+    num2 = random.randint(1, 10)
+    captcha_question = f"Combien font {num1} + {num2} ?"
+    session['captcha_answer'] = str(num1 + num2)
+    
     champs = df.columns.tolist()
     
     # Organiser les champs par catégorie
@@ -638,6 +716,17 @@ def add_camp():
             </div>
             """
         form_fields += '</div>'
+    
+    # Add captcha field
+    form_fields += f'''
+    <div class="form-category">
+        <h3>Vérification</h3>
+        <div class="form-group">
+            <label for="captcha">{captcha_question}</label>
+            <input type="text" id="captcha" name="captcha" placeholder="Entrez la réponse" required>
+        </div>
+    </div>
+    '''
     
     template = f"""
     <!DOCTYPE html>
@@ -768,10 +857,22 @@ def add_camp():
 # --- Traitement des données saisies ---
 @app.route("/submit_camp", methods=["POST"])
 def submit_camp():
-    global df
-    print("I see the submit_camp")
-    new_data = {col: request.form.get(col) for col in df.columns}
-    #df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+    # Verify captcha
+    user_captcha = request.form.get('captcha')
+    correct_captcha = session.get('captcha_answer')
+    
+    if not user_captcha or user_captcha != correct_captcha:
+        # Invalid captcha, redirect back to form
+        return redirect(url_for('add_camp'))
+    
+    global new_camps
+    #print("I see the submit_camp")
+    new_data = {col: request.form.get(col) for col in new_camps.columns}
+    try:
+        new_camps = pd.concat([new_camps, pd.DataFrame([new_data])], ignore_index=True)
+        #print("Data added successfully")
+    except Exception as e:
+        print(f"Error adding data: {e}")
     return redirect(url_for('index'))
 
 

@@ -9,7 +9,7 @@ def init_handler(app):
     def handle_exception(e):
 
         #loggit()!          
-
+        print(e)
         # return json response of error
         if isinstance(e, HTTPException):
             response = e.get_response()
