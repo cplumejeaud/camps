@@ -9,23 +9,40 @@ import plotly.graph_objects as go
 import numpy as np
 import geopandas as gpd
 import os
+from folium.plugins import VectorGridProtobuf
+from flask_cors import CORS, cross_origin
+# import error handling file from where you have defined it
+import error
+
+#Blocage d’une requête multiorigines (Cross-Origin Request) : la politique « Same Origin » ne permet pas de consulter la ressource distante située sur http://vtiles.plumegeo.fr/10/531/363.pbf. Raison : l’en-tête CORS « Access-Control-Allow-Origin » est manquant. Code d’état : 404
+#https://stackoverflow.com/questions/25594893/how-to-enable-cors-in-flask
 
 app = Flask(__name__)
+CORS(app) # This will enable CORS for all routes
+error.init_handler(app) # initialise error handling 
 
+#CORS(app, resources={r"/*": {"origins": "*"}})
+#CORS(app, origins=['http://localhost:5000', 'http://vtiles.plumegeo.fr/*'])
+#app.config['CORS_HEADERS'] = 'Content-Type'
+#https://www.alsacreations.com/article/lire/1938-La-notion-d-origine-web-et-CORS.html
 
+# https://stackoverflow.com/questions/26980713/solve-cross-origin-resource-sharing-with-flask
+#cors = CORS(app, resources={r"/": {"origins": "*"}})
+#app.config['CORS_HEADERS'] = 'Content-Type'
 
 # ============================================
 # CONFIGURATION
 # ============================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+#print(BASE_DIR)
 FILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\camps8_18-03-2025-sansNAniOUTLIERS.csv"
 SHAPEFILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\Espace_Schengen_ligne\Espace_Schengen_ligne.shp"
 
-# FILE_PATH = r"\camps8_18-03-2025-sansNAniOUTLIERS.csv"
-# SHAPEFILE_PATH = r"\Espace_Schengen_ligne.shp"
+FILE_PATH = os.path.join(BASE_DIR, r"camps8_18-03-2025-sansNAniOUTLIERS.csv")
+SHAPEFILE_PATH = os.path.join(BASE_DIR, r"Espace_Schengen_ligne\Espace_Schengen_ligne.shp")
 
-
-
+DEGURBA_PATH = os.path.join(BASE_DIR, r"DGURBA-2018-01M-SH\DGURBA_2018_01M.shp")
+COUNTRIES_PATH = os.path.join(BASE_DIR, r"ne_10m_countries_2021\ne_10m_admin_0_countries.shp")
 # ============================================
 # CHARGEMENT DES DONNÉES
 # ============================================
@@ -40,16 +57,16 @@ def load_data():
     df.columns = df.columns.str.strip()
     return df
 
-def load_schengen_shapefile():
-    gdf = gpd.read_file(SHAPEFILE_PATH)
+def load_shapefile(filepath):
+    gdf = gpd.read_file(filepath)
     if gdf.crs != "EPSG:4326":
         gdf = gdf.to_crs(epsg=4326)
     return gdf
 
 df = load_data()
-gdf_schengen = load_schengen_shapefile()
-
-
+gdf_schengen = load_shapefile(SHAPEFILE_PATH)
+gdf_countries = load_shapefile(COUNTRIES_PATH)
+#https://python-visualization.github.io/folium/latest/user_guide/plugins/vector_tiles.html
 
 # ============================================
 # CONSTANTES & MAPPINGS
@@ -109,12 +126,13 @@ def create_camps_map(dataframe):
 
     m = folium.Map(location=[center_lat, center_lon], zoom_start=5)
 
-    folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                     attr='Esri', name='Satellite', overlay=False).add_to(m)
+    #folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    #                 attr='Esri', name='Satellite', overlay=False).add_to(m)
     folium.TileLayer('CartoDB positron', name='Positron').add_to(m)
-    folium.TileLayer('OpenStreetMap', name='OSM').add_to(m)
+    #folium.TileLayer('OpenStreetMap', name='OSM').add_to(m)
 
     for idx, row in df_clean.iterrows():
+        #Attention, ce n'était pas degurba qu'il fallait cartographié (changer le fichier source)
         zone = normalize_zone(row.get('degurba'))
         color = ZONE_COLORS.get(zone, ZONE_COLORS['non classifié'])
 
@@ -149,6 +167,66 @@ def create_camps_map(dataframe):
     folium.GeoJson(gdf_schengen, name="Frontières Schengen",
                    style_function=lambda x: {'fillColor':'none', 'color':'blue', 'weight':2}).add_to(m)
 
+    folium.GeoJson(gdf_countries, name="Countries (natural earth)",
+                   style_function=lambda x: {'fillColor':'none', 'color':'black', 'weight':1}).add_to(m)
+
+
+     
+    styles = {
+        "cities": {
+            "fill": True,
+            "weight": 1,
+            "fillColor": "#cc068a",
+            "color": "#cc068a",
+            "fillOpacity": 0.2,
+            "opacity": 0.4
+        },
+        "degurba01": {
+            "fill": True,
+            "weight": 1,
+            "fillColor": "#ea0a0e",
+            "color": "#ea0a0e00",
+            "fillOpacity": 0.2,
+            "opacity": 0.4
+        },
+        "degurba02": {
+            "fill": True,
+            "weight": 0.1,
+            "fillColor": "#eafb01",
+            "color": "#eafb0100",
+            "fillOpacity": 0.2,
+            "opacity": 0.4
+        },
+        "degurba03": {
+            "fill": True,
+            "weight": 0.1,
+            "fillColor": "#13df68",
+            "color": "#13df6800",
+            "fillOpacity": 0.2,
+            "opacity": 0.4
+        },}
+    vectorTileLayerStyles = {}
+    vectorTileLayerStyles["cities"] = styles["cities"]
+    url = "http://vtiles.plumegeo.fr/fua/{z}/{x}/{y}.pbf"
+    options = {
+        "vectorTileLayerStyles": vectorTileLayerStyles
+    }
+
+    VectorGridProtobuf(url, "cities (FUA 2020)", options).add_to(m)
+
+    vectorTileLayerStyles2 = {}
+    vectorTileLayerStyles2["degurba01"] = styles["degurba01"]
+    vectorTileLayerStyles2["degurba02"] = styles["degurba02"]
+    vectorTileLayerStyles2["degurba03"] = styles["degurba03"]
+    print(vectorTileLayerStyles2)
+    url = "http://vtiles.plumegeo.fr/degurba/{z}/{x}/{y}.pbf"
+    options = {
+        "vectorTileLayerStyles": vectorTileLayerStyles2
+    }
+
+    VectorGridProtobuf(url, "DEGURBA (Eurostat 2018)", options).add_to(m)
+
+
     folium.LayerControl().add_to(m)
     m.get_root().html.add_child(folium.Element(create_legend_html()))
 
@@ -169,7 +247,7 @@ def create_legend_html():
         font-family: Arial, sans-serif;
         box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     ">
-        <b style="font-size: 14px; display: block; margin-bottom: 10px;">Légende</b>
+        <b style="font-size: 14px; display: block; margin-bottom: 10px;">Camps</b>
         
         <div style="display: flex; align-items: center; margin-bottom: 6px;">
             <div style="
@@ -294,6 +372,7 @@ def create_global_radar_chart(dataframe):
 # ROUTES
 # ============================================
 @app.route("/")
+@cross_origin()
 def index():
     map_html = create_camps_map(df)
     radar_html = create_global_radar_chart(df)
@@ -542,10 +621,10 @@ def add_camp():
     
     # Organiser les champs par catégorie
     categories = {
-        'Informations générales': ['nom_unique', 'type_camp', 'degurba'],
+        'Informations générales': ['nom_unique', 'type_camp', 'capacite'],
         'Localisation': ['camp_latitude', 'camp_longitude', 'pays'],
-        'Distances infrastructures': [col for col in champs if 'distance' in col.lower()],
-        'Autres': [col for col in champs if col not in ['nom_unique', 'type_camp', 'degurba', 'camp_latitude', 'camp_longitude', 'pays'] and 'distance' not in col.lower()]
+        #'Distances infrastructures': [col for col in champs if 'distance' in col.lower()],
+        #'Autres': [col for col in champs if col not in ['nom_unique', 'type_camp', 'degurba', 'camp_latitude', 'camp_longitude', 'pays'] and 'distance' not in col.lower()]
     }
     
     form_fields = ""
@@ -690,10 +769,11 @@ def add_camp():
 @app.route("/submit_camp", methods=["POST"])
 def submit_camp():
     global df
+    print("I see the submit_camp")
     new_data = {col: request.form.get(col) for col in df.columns}
-    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
+    #df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
     return redirect(url_for('index'))
 
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, port=5000)
+    app.run(debug=True,  port=5000) #use_reloader=False,
