@@ -2,6 +2,7 @@
 # Code_projet_V4.py – Version finale avec radar adaptatif + bouton vider
 # ============================================
 
+from turtle import color
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, session
 import pandas as pd
 import folium
@@ -234,7 +235,7 @@ def create_camps_map(dataframe, newcamps):
         print(newcamps_clean.columns)
         for idx, row in newcamps_clean.iterrows():
             color = "blue"
-            icon_html = f"""<div style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:14px solid {color};border-bottom-color:{color};box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>"""
+            icon_html = f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid {color};border-bottom-color:{color};"></div>"""
             icon = folium.DivIcon(html=icon_html, icon_size=(10,10), icon_anchor=(7,7))
 
             camp_name = row.get('nom_unique', 'Camp inconnu').replace("'", "\\'")
@@ -254,6 +255,32 @@ def create_camps_map(dataframe, newcamps):
 
     folium.LayerControl().add_to(m)
     m.get_root().html.add_child(folium.Element(create_legend_html()))
+
+    # Add double-click functionality to open add_camp form
+    double_click_script = """
+    <script>
+    // Function to handle double-click on map
+    function onMapDoubleClick(e) {
+        var lat = e.latlng.lat.toFixed(6);
+        var lng = e.latlng.lng.toFixed(6);
+        window.open('/add_camp?lat=' + lat + '&lng=' + lng, '_blank');
+    }
+
+    // Add the event listener after map loads
+    document.addEventListener('DOMContentLoaded', function() {
+        // Find all Folium maps
+        var maps = document.querySelectorAll('.folium-map');
+        maps.forEach(function(mapDiv) {
+            // Get the map ID from the div
+            var mapId = mapDiv.id;
+            if (window[mapId]) {
+                window[mapId].on('dblclick', onMapDoubleClick);
+            }
+        });
+    });
+    </script>
+    """
+    m.get_root().html.add_child(folium.Element(double_click_script))
 
     #return m._repr_html_()
     return m
@@ -317,6 +344,16 @@ def create_legend_html():
                 border: 1px solid white;
             "></div>
             <span style="font-size: 12px;">Non classifié</span>
+        </div>
+
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <div style="
+                width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
+                border-bottom:12px solid blue;border-bottom-color:blue;
+                margin-right: 8px;
+            ">
+            </div>
+            <span style="font-size: 12px;">Non vérifié</span>
         </div>
         
         <div style="display: flex; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e0e0e0;">
@@ -695,6 +732,10 @@ def add_camp():
     captcha_question = f"Combien font {num1} + {num2} ?"
     session['captcha_answer'] = str(num1 + num2)
     
+    # Get coordinates from query parameters
+    lat = request.args.get('lat', '')
+    lng = request.args.get('lng', '')
+    
     champs = df.columns.tolist()
     
     # Organiser les champs par catégorie
@@ -709,10 +750,17 @@ def add_camp():
     for cat_name, cols in categories.items():
         form_fields += f'<div class="form-category"><h3>{cat_name}</h3>'
         for col in cols:
+            # Pre-fill latitude and longitude if provided
+            value = ""
+            if col == 'camp_latitude' and lat:
+                value = lat
+            elif col == 'camp_longitude' and lng:
+                value = lng
+            
             form_fields += f"""
             <div class="form-group">
                 <label for="{col}">{col}</label>
-                <input type="text" id="{col}" name="{col}" placeholder="Entrez {col}">
+                <input type="text" id="{col}" name="{col}" placeholder="Entrez {col}" value="{value}">
             </div>
             """
         form_fields += '</div>'
