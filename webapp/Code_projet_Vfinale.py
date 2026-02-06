@@ -16,10 +16,39 @@ from flask_cors import CORS, cross_origin
 # import error handling file from where you have defined it
 import error
 
+import pandas.io.sql as sql
+from sqlalchemy import create_engine, text as sql_text
+
+
+# ============================================
+# CONFIGURATION
+# ============================================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+#print(BASE_DIR)
+#FILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\camps8_18-03-2025-sansNAniOUTLIERS.csv"
+#SHAPEFILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\Espace_Schengen_ligne\Espace_Schengen_ligne.shp"
+
+FILE_PATH = os.path.join(BASE_DIR, r"camps8_18-03-2025-sansNAniOUTLIERS.csv")
+SHAPEFILE_PATH = os.path.join(BASE_DIR, r"Espace_Schengen_ligne\Espace_Schengen_ligne.shp")
+
+DEGURBA_PATH = os.path.join(BASE_DIR, r"DGURBA-2018-01M-SH\DGURBA_2018_01M.shp")
+COUNTRIES_PATH = os.path.join(BASE_DIR, r"ne_10m_countries_2021\ne_10m_admin_0_countries.shp")
+
+
+TEMPLATE_PATH = os.path.join(BASE_DIR, 'templates/')
+STATIC_PATH = os.path.join(BASE_DIR, 'static/')
+
+CSVFILE_PATH = os.path.join(BASE_DIR, r"new_camps.csv")
+
+
+# ============================================
+# INIT the app
+# ============================================
+
 #Blocage d’une requête multiorigines (Cross-Origin Request) : la politique « Same Origin » ne permet pas de consulter la ressource distante située sur http://vtiles.plumegeo.fr/10/531/363.pbf. Raison : l’en-tête CORS « Access-Control-Allow-Origin » est manquant. Code d’état : 404
 #https://stackoverflow.com/questions/25594893/how-to-enable-cors-in-flask
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder = TEMPLATE_PATH)
 app.secret_key = 'your-secret-key-here-change-in-production'  # Required for session
 CORS(app) # This will enable CORS for all routes
 error.init_handler(app) # initialise error handling 
@@ -33,26 +62,54 @@ error.init_handler(app) # initialise error handling
 #cors = CORS(app, resources={r"/": {"origins": "*"}})
 #app.config['CORS_HEADERS'] = 'Content-Type'
 
-# ============================================
-# CONFIGURATION
-# ============================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-#print(BASE_DIR)
-FILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\camps8_18-03-2025-sansNAniOUTLIERS.csv"
-SHAPEFILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\Espace_Schengen_ligne\Espace_Schengen_ligne.shp"
 
-FILE_PATH = os.path.join(BASE_DIR, r"camps8_18-03-2025-sansNAniOUTLIERS.csv")
-SHAPEFILE_PATH = os.path.join(BASE_DIR, r"Espace_Schengen_ligne\Espace_Schengen_ligne.shp")
 
-DEGURBA_PATH = os.path.join(BASE_DIR, r"DGURBA-2018-01M-SH\DGURBA_2018_01M.shp")
-COUNTRIES_PATH = os.path.join(BASE_DIR, r"ne_10m_countries_2021\ne_10m_admin_0_countries.shp")
 # ============================================
 # CHARGEMENT DES DONNÉES
 # ============================================
 def load_data():
     try:
-        df = pd.read_csv(FILE_PATH, sep=None, engine='python', encoding='utf-8', on_bad_lines='skip')
+        QueryTous = """select unique_id, nom_unique, 
+        doublon,  bdd_source, localisation_qualite, 
+        camp_latitude, camp_longitude, "URL_maps",
+        iso3, pays, pays_population , pays_surfacekm2,
+        derniere_date_info , actif_dernieres_infos,
+        "ouverture/premiere_date", fermeture_date, 
+        camp_adresse, camp_code_postal, camp_commune, 
+        type_camp, 
+        capacite_2017, capacite_2018, capacite_2019, capacite_2020, capacite_2021, capacite_2022, capacite_2023, effectif_2017, effectif_2018, effectif_2019, effectif_2020, effectif_2021, effectif_hommes_2022, effectif_femmes_2022, effectifs_mineurs_2022, effectif_total_2022, duree_max_2017, duree_max_2018, duree_max_2019, duree_max_2020, duree_max_2021, duree_max_2022, duree_moy_2017, duree_moy_2018, duree_moy_2019, duree_moy_2020, duree_moy_2021, duree_moy_2022, mineurs_2017, mineurs_2018, mineurs_2019, mineurs_2020, mineurs_2021, nationalite, 
+        coalesce(capacite_2023, coalesce(capacite_2022::int, coalesce(capacite_2021, coalesce(capacite_2020, coalesce(capacite_2019, coalesce(capacite_2018, coalesce(capacite_2017::int, null))))))) as capacite,
+        prison, 
+        degurba, 
+        horsdburba, 
+        ville_proche_nom ,  "ville_proche_code postal",
+        ville_proche_population , distance_ville_proche, 
+        eurostat_computed_fua_code, eurostat_computed_gisco_id, eurostat_name_ascii_2016, eurostat_pop_2019, camps_commune_surfacekm2,
+        infrastructure_norm,	infrastructure_avant_conversion,	infrastructure_solidite,	infrastructure_confort,
+        climat,   
+        mairie_distance, atm_distance, hopital_distance, pharmacie_distance, arret_bus_distance_km, gare_distance_km, 
+        medecin_clinique_hors_camp_distance_km, dentiste_hors_camp_distance_km,
+        ecole_hors_camp_distance_km, poste_hors_camp_distance_km,
+        clc_majoritaire_2, clc_majoritaire_3, clc_majoritaire_23_mixte, clc_majoritaire_13_mixte,
+        distance_13_mines_decharges_chantiers, distance_124_aeroport, distance_123_zones_portuaires, distance_122_reseaux_routiers, distance_24_zones_agricoles_heterogenes, distance_41_zones_humides_interieures, distance_121_zi_zac,
+        distanceschengenkm, eloignementschengen , classificationWeb, membersClus3 , membersClus4, 
+        geom
+        from camps.camps8 c 
+        where  true
+        and point3857 is not null and doublon='Non' 
+        order by pays ; """
+        
+        #engine = create_engine('postgresql://postgres:postgres@localhost:5432/camps_europe')
+        engine = create_engine('postgresql://camps_reader:Camps_2026@localhost:5432/camps')
+        ORM_conn=engine.connect()
+        ORM_conn
+
+        df = pd.read_sql_query(con=ORM_conn, sql=sql_text(QueryTous))
+        df['derniere_date_info'] = pd.to_numeric(df['derniere_date_info'], errors='coerce').astype('Int64')
+
+        #df = pd.read_csv(FILE_PATH, sep=None, engine='python', encoding='utf-8', on_bad_lines='skip')
     except:
+        print('reading CSV file')
         try:
             df = pd.read_csv(FILE_PATH, sep=';', encoding='utf-8', on_bad_lines='skip')
         except:
@@ -66,8 +123,22 @@ def load_shapefile(filepath):
         gdf = gdf.to_crs(epsg=4326)
     return gdf
 
-df = load_data()
-new_camps = pd.DataFrame(columns=df.columns.tolist())  # DataFrame pour les nouveaux camps ajoutés
+camps = load_data()
+#print(camps.columns)
+
+    
+## Formulaire 
+formColumns = ['nom_unique', 'camp_latitude', 'camp_longitude', 'camp_adresse', 'pays', 'type_camp', 'ouverture/premiere_date', 'fermeture_date', 'actif_dernieres_infos', 'derniere_date_info', 'bdd_source', 'capacite', 'infrastructure_norm', 'infrastructure_avant_conversion', 'hommes', 'femmes', 'mineurs', 'mail_contributeur', 'comment']
+
+## DataFrame pour les nouveaux camps ajoutés via le formulaire
+## Si le serveur est redémarré, les données seront perdues, mais on peut les sauvegarder dans un csv pour garder une trace (optionnel)
+## Lire les données existantes dans le csv au démarrage du serveur pour les réintégrer dans la carte
+if os.path.exists(CSVFILE_PATH) :
+    new_camps = pd.read_csv(CSVFILE_PATH, sep=";") 
+else :
+    new_camps = pd.DataFrame(columns=formColumns)  # DataFrame pour les nouveaux camps ajoutés 
+
+#new_camps = pd.DataFrame(columns=formColumns)  # DataFrame pour les nouveaux camps ajoutés 
 gdf_schengen = load_shapefile(SHAPEFILE_PATH)
 gdf_countries = load_shapefile(COUNTRIES_PATH)
 #https://python-visualization.github.io/folium/latest/user_guide/plugins/vector_tiles.html
@@ -78,16 +149,19 @@ gdf_countries = load_shapefile(COUNTRIES_PATH)
 DEGURBA_MAPPING = {
     'ville': 'ville', 'urban': 'ville', 'urbain': 'ville', 'city': 'ville',
     'banlieue': 'banlieue', 'périphérie': 'banlieue', 'suburban': 'banlieue', 'peri-urban': 'banlieue',
-    'rural': 'rural', 'countryside': 'rural', 'campagne': 'rural'
+    'rural': 'rural', 'countryside': 'rural', 'campagne': 'rural', 'non vérifié': 'non vérifié'
 }
 
 ZONE_COLORS = {
     'ville': '#dc2626',
     'banlieue': '#f59e0b',
     'rural': '#059669',
-    'non classifié': '#6b7280'
+    'non classifié': '#6b7280',
+    'non vérifié': "#000000"
 }
 
+
+        
 INFRASTRUCTURES = {
     'Hôpital': 'hopital_distance',
     'Pharmacie': 'pharmacie_distance',
@@ -104,10 +178,10 @@ INFRASTRUCTURES = {
 # ============================================
 # UTILITAIRES
 # ============================================
-def normalize_zone(degurba):
-    if not degurba or pd.isna(degurba):
+def normalize_zone(classificationweb):
+    if not classificationweb or pd.isna(classificationweb):
         return 'non classifié'
-    return DEGURBA_MAPPING.get(str(degurba).lower().strip(), 'non classifié')
+    return DEGURBA_MAPPING.get(str(classificationweb).lower().strip(), 'non classifié')
 
 def safe_float(value, default=0.0):
     try:
@@ -115,35 +189,146 @@ def safe_float(value, default=0.0):
     except:
         return default
 
-
+def  get_zone_shape(type_camp, classificationweb, color, actif) : 
+    # &#9658; https://www.w3schools.com/charsets/ref_utf_geometric.asp drapeau sur fond blanc
+    if (classificationweb=='non classifié') : 
+        #print("point")
+        #point  ok
+        icon = f"""<div style="width:7px;height:7px;border-radius:50%;background:#222;display:inline-block;margin-right: 8px;"></div>"""
+        
+        if (not actif) : 
+            # point avec cible autour pour inactifs
+            icon = f"""<div style="width:16px;height:16px;border-radius:50%;border:1px solid {color};background:transparent;display:flex;align-items:center;justify-content:center;margin-right: 8px;">
+                <div style="width:7px;height:7px;border-radius:50%;background:{color};border:1px solid {color};display:inline-block;"></div>
+            </div>"""
+    elif  (classificationweb=='non vérifié') :
+        #print("triangle")
+        #triangle ok
+        icon = f"""<div style="width:0;height:0;
+                border-left:6px solid transparent;
+                border-right:6px solid transparent;
+                border-bottom:12px solid {color};
+                border-bottom-color:{color};
+                margin-right: 8px;
+                position:relative;
+            ">
+            </div>
+            """
+        if (not actif) : 
+            # triangle hâchuré pour inactifs
+            icon = f"""
+                <div style="
+                    width:0;height:0;
+                    border-left:6px solid transparent;
+                    border-right:6px solid transparent;
+                    border-bottom:12px solid {color};
+                    position:relative;
+                    margin-right: 8px;
+                ">
+                <div style="
+                    position:absolute;
+                    left:-6px; top:0;
+                    width:12px; height:12px;
+                    clip-path:polygon(50% 0%,0% 100%,100% 100%);
+                    background: repeating-linear-gradient(45deg, #fff 0 2px, transparent 2px 4px);
+                    opacity:0.7;
+                    pointer-events:none;
+                "></div>
+            </div>
+            """
+    elif (type_camp == 'ouvert') : 
+        #rond  plein pour actifs
+        icon = f"""
+            <div style="width:12px;height:12px;border-radius:50%;
+            background:{color};border:0.75px solid white;
+            box-shadow:0 2px 4px rgba(0,0,0,0.3);
+            margin-right: 8px;"></div>
+        """
+        if (not actif) : 
+            # rond hâchuré pour inactifs
+            icon = f"""
+            <div style="
+                width:12px;height:12px;border-radius:50%;
+                background: repeating-linear-gradient(
+                    45deg, {color}, {color} 2px, #fff 2px, #fff 4px
+                );
+                border:2px solid {color};
+                box-shadow:0 2px 4px rgba(0,0,0,0.3);
+                margin-right: 8px;
+            "></div>
+            """
+    elif (type_camp == 'fermé') : 
+        #carré ok
+        icon = f"""
+        <div style="width:11px;height:11px;background:{color};
+            border:0.75px solid white;
+            box-shadow:0 2px 4px rgba(0,0,0,0.3);
+            margin-right: 8px;"></div>
+        """
+        if (not actif) : 
+            # carré hâchuré pour inactifs
+            icon = f"""
+            <div style="
+                width:11px;height:11px;
+                background: repeating-linear-gradient(
+                    45deg, {color}, {color} 2px, #fff 2px, #fff 4px
+                );
+                border:2px solid {color};
+                box-shadow:0 2px 4px rgba(0,0,0,0.3);
+                margin-right: 8px;
+            "></div>
+            """
+    elif (type_camp == 'doute' or type_camp == 'semi-ouvert') : 
+        #losange ok
+        icon = f"""
+        <div style="width:12px;height:12px;background:{color};transform:rotate(45deg);
+                    border:0.75px solid white;
+                    box-shadow:0 2px 4px rgba(0,0,0,0.3) transform:rotate(30deg);
+                    margin-right: 8px;"></div>
+        """
+        if (not actif) : 
+            # losange hâchuré pour inactifs
+            icon = f"""
+            <div style="
+                width:12px;height:12px;transform:rotate(45deg);
+                background: repeating-linear-gradient(
+                    45deg, {color}, {color} 2px, #fff 2px, #fff 4px
+                );
+                border:2px solid {color};
+                box-shadow:0 2px 4px rgba(0,0,0,0.3)  transform:rotate(45deg);
+                margin-right: 8px;
+            "></div>
+            """
+    return icon
 
 # ============================================
 # CARTE FOLIUM
 # ============================================
 def create_camps_map(dataframe, newcamps):
-       
-    df_clean = dataframe.dropna(subset=['camp_latitude', 'camp_longitude']).copy().reset_index(drop=True)
-    if df_clean.empty:
-        return "<p>Aucune donnée de localisation disponible</p>"
-
-    center_lat = df_clean['camp_latitude'].mean()
-    center_lon = df_clean['camp_longitude'].mean()
+         
+    center_lat = dataframe['camp_latitude'].mean()
+    center_lon = dataframe['camp_longitude'].mean()
 
     m = folium.Map(location=[center_lat, center_lon], zoom_start=5, max_bounds=True)
 
-    #folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    #                 attr='Esri', name='Satellite', overlay=False).add_to(m)
     folium.TileLayer('CartoDB positron', name='Positron').add_to(m)
 
-    for idx, row in df_clean.iterrows():
+    # Deux couches de camps, les actifs et les inactifs
+    camps_actifs_layer = folium.FeatureGroup(name="Camps actifs", show=True)
+    camps_inactifs_layer = folium.FeatureGroup(name="Camps désaffectés", show=False)
+
+    for idx, row in dataframe.iterrows():
+        actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (int(row.get('derniere_date_info', 0)) >= 2018)
+        
         #Attention, ce n'était pas degurba qu'il fallait cartographié (changer le fichier source)
-        zone = normalize_zone(row.get('degurba'))
+        zone = normalize_zone(row.get('classificationweb'))
         color = ZONE_COLORS.get(zone, ZONE_COLORS['non classifié'])
 
-        icon_html = f"""
-        <div style="width:10px;height:10px;background:{color};transform:rotate(45deg);
-                    border:0.75px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3);"></div>
-        """
+        #TRACE type_camps, classificationweb, color
+        #if row.get('unique_id') == '154' or row.get('unique_id')== '165':
+        #    print(f"""type_camp: {row.get('type_camp')}, classificationweb: {zone}, color: {color}, actif: {actif}""")
+        icon_html = get_zone_shape(row.get('type_camp'), zone, color, actif)
+
         icon = folium.DivIcon(html=icon_html, icon_size=(14,14), icon_anchor=(7,7))
 
         camp_name = row.get('nom_unique', 'Camp inconnu').replace("'", "\\'")
@@ -151,8 +336,9 @@ def create_camps_map(dataframe, newcamps):
         popup_html = f"""
         <div style="font-family:Arial,sans-serif;min-width:200px;">
             <b style="font-size:14px;">{row.get('nom_unique', 'N/A')}</b><br>
-            <span style="color:#666;">Type: {row.get('type_camp', 'N/A')}</span><br>
-            <span style="color:#666;">Zone: {zone}</span><br>
+            <span style="color:#666;">Type : {row.get('type_camp', 'N/A')}</span><br>
+            <span style="color:#666;">Actif : {actif}</span><br>
+            <span style="color:#666;">Classification : {zone}</span><br>
             <button onclick="window.parent.toggleRadarForCamp({idx}, '{camp_name}')"
                     style="margin-top:10px;padding:8px 16px;background:#16a34a;color:white;
                            border:none;border-radius:4px;cursor:pointer;font-weight:600;">
@@ -160,14 +346,20 @@ def create_camps_map(dataframe, newcamps):
             </button>
         </div>
         """
+        marker = folium.Marker(
+                location=[row['camp_latitude'], row['camp_longitude']],
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=row.get('nom_unique', 'Camp'),
+                icon=icon
+            )
+        
+        if( actif):
+            marker.add_to(camps_actifs_layer)
+        else:
+            marker.add_to(camps_inactifs_layer)
 
-        folium.Marker(
-            location=[row['camp_latitude'], row['camp_longitude']],
-            popup=folium.Popup(popup_html, max_width=300),
-            tooltip=row.get('nom_unique', 'Camp'),
-            icon=icon
-        ).add_to(m)
-
+    camps_actifs_layer.add_to(m)
+    camps_inactifs_layer.add_to(m)
     folium.GeoJson(gdf_schengen, name="Frontières Schengen",
                    style_function=lambda x: {'fillColor':'none', 'color':'blue', 'weight':2}).add_to(m)
 
@@ -232,18 +424,24 @@ def create_camps_map(dataframe, newcamps):
     newcamps_clean = newcamps.dropna(subset=['camp_latitude', 'camp_longitude']).copy().reset_index(drop=True)
     if not newcamps_clean.empty:
         print(newcamps_clean.shape)
-        print(newcamps_clean.columns)
+        #print(newcamps_clean.columns)
         for idx, row in newcamps_clean.iterrows():
-            color = "blue"
-            icon_html = f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid {color};border-bottom-color:{color};"></div>"""
+            zone = 'non vérifié'
+            color = ZONE_COLORS[zone]
+            actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (int(row.get('derniere_date_info', 0)) >= 2018)
+            #icon_html = f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid {color};border-bottom-color:{color};"></div>"""
+            icon_html = get_zone_shape(row.get('type_camp'), zone, color, actif)
             icon = folium.DivIcon(html=icon_html, icon_size=(10,10), icon_anchor=(7,7))
 
+        
             camp_name = row.get('nom_unique', 'Camp inconnu').replace("'", "\\'")
 
             popup_html = f"""
                 <div style="font-family:Arial,sans-serif;min-width:200px;">
                     <b style="font-size:14px;">{row.get('nom_unique', 'N/A')}</b><br>
-                    <span style="color:#666;">Type: {row.get('type_camp', 'N/A')}</span><br>
+                    <span style="color:#666;">Type : {row.get('type_camp', 'N/A')}</span><br>
+                    <span style="color:#666;">Actif : {actif}</span><br>
+                    <span style="color:#666;">Classification : {zone}</span><br>
                 </div>
                 """
             folium.Marker(
@@ -280,12 +478,22 @@ def create_camps_map(dataframe, newcamps):
     });
     </script>
     """
+    
+    # Inject the double-click script into the map's HTML
     m.get_root().html.add_child(folium.Element(double_click_script))
 
+    
     #return m._repr_html_()
     return m
 
 def create_legend_html():
+    #icon_html_rond = get_zone_shape('ouvert', '', 'grey', True)
+    #icon_html_carre = get_zone_shape('fermé', '', 'grey', True)
+    #icon_html_losange = get_zone_shape('semi-ouvert', '', 'grey', True)
+    #icon_html_point = get_zone_shape('', 'non classifié', 'grey', True)
+    #icon_html_triangle = get_zone_shape('', 'non vérifié', 'black', True)
+
+
     """Crée le HTML de la légende"""
     return f'''
     <div style="
@@ -300,60 +508,152 @@ def create_legend_html():
         font-family: Arial, sans-serif;
         box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     ">
-        <b style="font-size: 14px; display: block; margin-bottom: 10px;">Camps</b>
+        <b style="font-size: 14px; display: block; margin-bottom: 10px;">Camps actifs</b>
         
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="
-                width: 10px; height: 10px;
-                background-color: {ZONE_COLORS['ville']};
-                transform: rotate(45deg);
-                margin-right: 8px;
-                border: 1px solid white;
-            "></div>
-            <span style="font-size: 12px;">Ville</span>
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="
-                width: 10px; height: 10px;
-                background-color: {ZONE_COLORS['banlieue']};
-                transform: rotate(45deg);
-                margin-right: 8px;
-                border: 1px solid white;
-            "></div>
-            <span style="font-size: 12px;">Banlieue</span>
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="
-                width: 10px; height: 10px;
-                background-color: {ZONE_COLORS['rural']};
-                transform: rotate(45deg);
-                margin-right: 8px;
-                border: 1px solid white;
-            "></div>
-            <span style="font-size: 12px;">Rural</span>
-        </div>
+        <table
+            style="border-collapse: collapse; margin-bottom: 10px; width: 100%;">
+            <tr>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    <span style="font-size: 12px;">Type de camp</span>
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    <span style="font-size: 12px;">Ville</span>
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    <span style="font-size: 12px;">Banlieue</span>
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    <span style="font-size: 12px;">Rural</span>
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    <span style="font-size: 12px;">Ouvert</span>
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('ouvert', '', ZONE_COLORS['ville'], True)}
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('ouvert', '', ZONE_COLORS['banlieue'], True)}
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('ouvert', '', ZONE_COLORS['rural'], True)}
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    <span style="font-size: 12px;">Fermé</span>
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('fermé', '', ZONE_COLORS['ville'], True)}
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('fermé', '', ZONE_COLORS['banlieue'], True)}
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('fermé', '', ZONE_COLORS['rural'], True)}
+                </td>
+            </tr>
+            <tr>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    <span style="font-size: 12px;">Clopen</span>
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('semi-ouvert', '', ZONE_COLORS['ville'], True)}
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('semi-ouvert', '', ZONE_COLORS['banlieue'], True)}
+                </td>
+                <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                    {get_zone_shape('semi-ouvert', '', ZONE_COLORS['rural'], True)}
+                </td>
+            </tr>
+        </table>
         
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <div style="
-                width: 10px; height: 10px;
-                background-color: {ZONE_COLORS['non classifié']};
-                transform: rotate(45deg);
-                margin-right: 8px;
-                border: 1px solid white;
-            "></div>
+            {get_zone_shape('', 'non classifié', 'grey', True)}
             <span style="font-size: 12px;">Non classifié</span>
         </div>
 
         <div style="display: flex; align-items: center; margin-bottom: 8px;">
-            <div style="
-                width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;
-                border-bottom:12px solid blue;border-bottom-color:blue;
-                margin-right: 8px;
-            ">
-            </div>
+            {get_zone_shape('', 'non vérifié', 'black', True)}
             <span style="font-size: 12px;">Non vérifié</span>
+        </div>
+
+        <div style=" margin-top: 10px; padding-top: 8px; border-top: 1px solid #e0e0e0;">
+        
+            <b style="font-size: 14px; display: block; margin-bottom: 10px;">Camps désaffectés</b>
+        
+            <table
+                style="border-collapse: collapse; margin-bottom: 10px; width: 100%;">
+                <tr>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        <span style="font-size: 12px;">Type de camp</span>
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        <span style="font-size: 12px;">Ville</span>
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        <span style="font-size: 12px;">Banlieue</span>
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        <span style="font-size: 12px;">Rural</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        <span style="font-size: 12px;">Ouvert</span>
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('ouvert', '', ZONE_COLORS['ville'], False)}
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('ouvert', '', ZONE_COLORS['banlieue'], False)}
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('ouvert', '', ZONE_COLORS['rural'], False)}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        <span style="font-size: 12px;">Fermé</span>
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('fermé', '', ZONE_COLORS['ville'], False)}
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('fermé', '', ZONE_COLORS['banlieue'], False)}
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('fermé', '', ZONE_COLORS['rural'], False)}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        <span style="font-size: 12px;">Clopen</span>
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('semi-ouvert', '', ZONE_COLORS['ville'], False)}
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('semi-ouvert', '', ZONE_COLORS['banlieue'], False)}
+                    </td>
+                    <td style="padding: 4px; border: 1px solid #e0e0e0; text-align: center; vertical-align: middle;">
+                        {get_zone_shape('semi-ouvert', '', ZONE_COLORS['rural'], False)}
+                    </td>
+                </tr>
+            </table>
+        
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                {get_zone_shape('', 'non classifié', 'grey', False)}
+                <span style="font-size: 12px;">Non classifié</span>
+            </div>
+
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                {get_zone_shape('', 'non vérifié', 'black', False)}
+                <span style="font-size: 12px;">Non vérifié</span>
+            </div>
+        
         </div>
         
         <div style="display: flex; align-items: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid #e0e0e0;">
@@ -436,7 +736,7 @@ def create_global_radar_chart(dataframe):
 # ============================================
 @app.route("/")
 def index():
-    map = create_camps_map(df, new_camps)
+    map = create_camps_map(camps, new_camps)
 
     # map.get_root().render()
     # mapheader = map.get_root().header.render()
@@ -444,8 +744,9 @@ def index():
     # mapscript = map.get_root().script.render()
     map_html = map._repr_html_()
 
-    radar_html = create_global_radar_chart(df)
-
+    radar_html = create_global_radar_chart(camps)
+    info_message = session.pop('info_message', None)
+    
     template = """
     <!DOCTYPE html>
     <html lang="fr">
@@ -487,6 +788,12 @@ def index():
         </style>
     </head>
     <body>
+        {% if info_message %}
+        <div style="background:#e0f7fa;color:#006064;padding:12px 20px;border-radius:8px;
+                    margin:20px auto 0 auto;max-width:700px;text-align:center;font-size:1.1em;">
+            {{ info_message }}
+        </div>
+        {% endif %}
         <div class="container">
             <div class="header">
                 <h1>Analyse Géographique des Camps de Migrants en Europe</h1>
@@ -494,7 +801,7 @@ def index():
             </div>
             <div class="content">
                 <div class="section radar-section">
-                    <h2>Distances aux Infrastructures</h2>
+                    <h2>Distances aux aménités socio-environnementales</h2>
                     <div class="camp-info" id="campInfo" style="display:none;">
                         <h3 id="campName"></h3>
                         <p id="campDetails"></p>
@@ -512,7 +819,7 @@ def index():
                 </div>
 
                 <div class="section map-section">
-                    <h2>Carte Interactive</h2>
+                    <h2>Carte des camps pour migrants en Europe et autour</h2>
                     <div id="map">{{ map_html|safe }} </div> 
                 </div>
             </div>
@@ -598,6 +905,10 @@ def index():
                     fetch(`/get_camp_data/${campId}`)
                         .then(r => r.json())
                         .then(data => {
+                            if (data.error && data.info) {
+                                alert(data.info);
+                                return;
+                            }
                             const dist = [...data.distances, data.distances[0]];
                             const cat = [...data.categories, data.categories[0]];
                             const color = colors[visibleCamps.size % colors.length];
@@ -705,13 +1016,19 @@ def index():
     </html>
     """
     #return render_template_string(template, mapheader=mapheader, mapbody_html=mapbody_html, mapscript=mapscript, radar_html=radar_html)
-    return render_template_string(template, map_html=map_html, radar_html=radar_html)
+    return render_template_string(template, map_html=map_html, radar_html=radar_html, info_message=info_message)
 
 @app.route("/get_camp_data/<int:camp_id>")
 def get_camp_data(camp_id):
     try:
-        camp = df.iloc[camp_id]
+        camp = camps.iloc[camp_id]
         distances = [safe_float(camp.get(col, 0)) for col in INFRASTRUCTURES.values()]
+        #Si toutes les distances sont nulles ou invalides, on peut choisir de ne pas afficher le radar pour ce camp
+        if all((d is None or d == 0) for d in distances):
+            return jsonify({
+                'error': 'Aucune donnée de distance disponible pour ce camp.',
+                'info': "Les distances aux aménités socio-environnementales des camps de ce pays n'ont pas (encore) été calculées."
+                }), 400
         return jsonify({
             'nom': str(camp.get('nom_unique', 'Inconnu')),
             'type': str(camp.get('type_camp', 'N/A')),
@@ -726,6 +1043,34 @@ def get_camp_data(camp_id):
 # --- Formulaire pour ajouter un nouveau camp ---
 @app.route("/add_camp", methods=["GET"])
 def add_camp():
+    """ - Nom du camp _[texte]_
+
+- Adresse précise _[texte]_
+
+- Pays _[liste]_
+
+- Type de camp ("ouvert" / "fermé" / "clo-pen") _[liste / radio bouton]_
+
+- Date d'ouverture (si connue) _[date]_
+
+- actif_dernieres_infos (si le camp est encore actif ou si les dernières informations disponibles indiquent qu'il l'était) _[case à cocher]_
+
+- Date de fermeture (si camp désormais inactif) _[date]_
+
+- Date de la dernière information _[date]_
+
+- Source (observation personnelle / article journalistique / lien internet) _[case à cocher + texte]_
+
+- Capacité du camp _[int]_
+
+- Infrastructure réemployée _[liste + texte si "autre"]_
+
+- Personnes encampées (si information disponible : hommes / femmes / enfants) _[case à cocher]_
+
+- Mail de la personne qui contribue _[texte]_
+
+- Champ de texte libre _[texte]_ """
+    
     # Generate captcha
     num1 = random.randint(1, 10)
     num2 = random.randint(1, 10)
@@ -736,12 +1081,14 @@ def add_camp():
     lat = request.args.get('lat', '')
     lng = request.args.get('lng', '')
     
-    champs = df.columns.tolist()
+    champs = camps.columns.tolist()
     
     # Organiser les champs par catégorie
     categories = {
         'Informations générales': ['nom_unique', 'type_camp', 'capacite'],
-        'Localisation': ['camp_latitude', 'camp_longitude', 'pays'],
+        'Localisation': ['camp_latitude', 'camp_longitude', 'camp_adresse', 'pays'],
+        'Détails': ['ouverture/premiere_date', 'fermeture_date', 'actif_dernieres_infos', 'derniere_date_info', 'infrastructure_norm', 'infrastructure_avant_conversion', 'hommes', 'femmes', 'mineurs'],
+        'Métadonnées' : ['bdd_source', 'mail_contributeur', 'comment']
         #'Distances infrastructures': [col for col in champs if 'distance' in col.lower()],
         #'Autres': [col for col in champs if col not in ['nom_unique', 'type_camp', 'degurba', 'camp_latitude', 'camp_longitude', 'pays'] and 'distance' not in col.lower()]
     }
@@ -886,6 +1233,7 @@ def add_camp():
             <div class="form-header">
                 <h1>➕ Ajouter un nouveau camp</h1>
                 <p>Remplissez les informations ci-dessous</p>
+                <p>Ne saisissez pas de point-virgules (;) dans les champs sinon la saisie sera refusée</p>
             </div>
             <div class="form-content">
                 <form method="post" action="{{{{ url_for('submit_camp') }}}}">
@@ -911,18 +1259,29 @@ def submit_camp():
     
     if not user_captcha or user_captcha != correct_captcha:
         # Invalid captcha, redirect back to form
+        session['info_message'] = "Erreur de vérification : la réponse au captcha est incorrecte."
         return redirect(url_for('add_camp'))
     
     global new_camps
-    #print("I see the submit_camp")
     new_data = {col: request.form.get(col) for col in new_camps.columns}
+    #Tester que les données ne contiennent pas de point-virgule (car sinon ça casse le csv)
+    for key, value in new_data.items():
+        if value and ';' in value:
+            #print(f"Invalid input for {key}: contains semicolon")  
+            #On indique quel champ est concerné dans le message d'erreur   
+            session['info_message'] = f"Erreur : le champ '{key}' contient un point-virgule, ce qui n'est pas autorisé."
+            return redirect(url_for('add_camp'))
     try:
         new_camps = pd.concat([new_camps, pd.DataFrame([new_data])], ignore_index=True)
         #print("Data added successfully")
+        #Sauver le camps dans un csv pour garder une trace (optionnel)
+        new_camps.to_csv(CSVFILE_PATH, index=False, mode='w', sep=';')
+        session['info_message'] = "Le camp a bien été ajouté et enregistré."
     except Exception as e:
+        session['info_message'] = f"Erreur lors de l'ajout du camp : {e}"
         print(f"Error adding data: {e}")
     return redirect(url_for('index'))
 
 
 if __name__ == "__main__":
-    app.run(debug=True,  port=5000) #use_reloader=False,
+    app.run(debug=False,  port=5000) #use_reloader=False,
