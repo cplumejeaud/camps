@@ -2,7 +2,6 @@
 # Code_projet_V4.py – Version finale avec radar adaptatif + bouton vider
 # ============================================
 
-from turtle import color
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify, session
 import pandas as pd
 import folium
@@ -28,11 +27,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 #FILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\camps8_18-03-2025-sansNAniOUTLIERS.csv"
 #SHAPEFILE_PATH = r"C:\Travail\Enseignement\Cours_M2_python\2025\Projet_CAMPS\Espace_Schengen_ligne\Espace_Schengen_ligne.shp"
 
-FILE_PATH = os.path.join(BASE_DIR, r"camps8_18-03-2025-sansNAniOUTLIERS.csv")
-SHAPEFILE_PATH = os.path.join(BASE_DIR, r"Espace_Schengen_ligne\Espace_Schengen_ligne.shp")
+#camps8_18-03-2025-sansNAniOUTLIERS
+FILE_PATH = os.path.join(BASE_DIR, r"camps8_06022026_Maison.csv")
+SHAPEFILE_PATH = os.path.join(BASE_DIR, r"Espace_Schengen_ligne")
+SHAPEFILE_PATH = os.path.join(SHAPEFILE_PATH, r"Espace_Schengen_ligne.shp")
 
 DEGURBA_PATH = os.path.join(BASE_DIR, r"DGURBA-2018-01M-SH\DGURBA_2018_01M.shp")
-COUNTRIES_PATH = os.path.join(BASE_DIR, r"ne_10m_countries_2021\ne_10m_admin_0_countries.shp")
+COUNTRIES_PATH = os.path.join(BASE_DIR, r"ne_10m_countries_2021")
+COUNTRIES_PATH = os.path.join(COUNTRIES_PATH, r"ne_10m_admin_0_countries.shp")
 
 
 TEMPLATE_PATH = os.path.join(BASE_DIR, 'templates/')
@@ -100,21 +102,31 @@ def load_data():
         order by pays ; """
         
         #engine = create_engine('postgresql://postgres:postgres@localhost:5432/camps_europe')
+        print("-------------------- Connecting to database -----------------------")
+        print("postgresql://camps_reader:Camps_2026@localhost:5432/camps")
         engine = create_engine('postgresql://camps_reader:Camps_2026@localhost:5432/camps')
         ORM_conn=engine.connect()
         ORM_conn
-
+        print(ORM_conn)
+        
         df = pd.read_sql_query(con=ORM_conn, sql=sql_text(QueryTous))
-        df['derniere_date_info'] = pd.to_numeric(df['derniere_date_info'], errors='coerce').astype('Int64')
 
-        #df = pd.read_csv(FILE_PATH, sep=None, engine='python', encoding='utf-8', on_bad_lines='skip')
-    except:
+        print('Data loaded from database')
+        print(df.shape)
+        
+        ORM_conn.close()
+
+    except Exception as e:
+        print(f"Error connecting to database or executing query: {e}")
         print('reading CSV file')
         try:
             df = pd.read_csv(FILE_PATH, sep=';', encoding='utf-8', on_bad_lines='skip')
+            #df = pd.read_csv(FILE_PATH, sep=None, engine='python', encoding='utf-8', on_bad_lines='skip')
         except:
             df = pd.read_csv(FILE_PATH, sep=';', encoding='latin1', on_bad_lines='skip')
     df.columns = df.columns.str.strip()
+    df['derniere_date_info'] = pd.to_numeric(df['derniere_date_info'], errors='coerce').astype('Int64')
+    
     return df
 
 def load_shapefile(filepath):
