@@ -2,7 +2,7 @@
 # Code_projet_V4.py – Version finale avec radar adaptatif + bouton vider
 # ============================================
 
-from flask import Flask, render_template_string, request, redirect, url_for, jsonify, session
+from flask import Flask, render_template_string, request, redirect, url_for, jsonify, session, g
 import pandas as pd
 import folium
 import plotly.graph_objects as go
@@ -42,6 +42,7 @@ STATIC_PATH = os.path.join(BASE_DIR, 'static/')
 
 CSVFILE_PATH = os.path.join(BASE_DIR, r"new_camps.csv")
 
+CONFIGFILE_PATH = os.path.join(BASE_DIR, r"config_notes_isolement.xlsx")
 
 # ============================================
 # INIT the app
@@ -101,10 +102,11 @@ def load_data():
         and point3857 is not null and doublon='Non' 
         order by pays ; """
         
-        #engine = create_engine('postgresql://postgres:postgres@localhost:5432/camps_europe')
         print("-------------------- Connecting to database -----------------------")
-        print("postgresql://camps_reader:Camps_2026@localhost:5432/camps")
-        engine = create_engine('postgresql://camps_reader:Camps_2026@localhost:5432/camps')
+        #print("postgresql://camps_reader:Camps_2026@localhost:5432/camps")
+        #engine = create_engine('postgresql://camps_reader:Camps_2026@localhost:5432/camps')
+        engine = create_engine('postgresql://postgres:postgres@localhost:5432/camps_europe')
+        
         ORM_conn=engine.connect()
         ORM_conn
         print(ORM_conn)
@@ -135,6 +137,20 @@ def load_shapefile(filepath):
         gdf = gdf.to_crs(epsg=4326)
     return gdf
 
+
+
+config_notes  = pd.read_excel(CONFIGFILE_PATH, sheet_name='2024-11-25_indices_isolement', skiprows=1)
+config_translations  = pd.read_excel(CONFIGFILE_PATH, sheet_name='traductions')
+
+TRANSLATIONS = dict()
+for _, col in config_translations.columns.to_series().items():
+    if (col.strip() != 'keys') :
+        TRANSLATIONS[col.strip()] = dict()
+        for _, row in config_translations.iterrows():
+            TRANSLATIONS[col.strip()][row['keys']] = row[col.strip()]
+
+#print(TRANSLATIONS)
+
 camps = load_data()
 #print(camps.columns)
 
@@ -154,6 +170,36 @@ else :
 gdf_schengen = load_shapefile(SHAPEFILE_PATH)
 gdf_countries = load_shapefile(COUNTRIES_PATH)
 #https://python-visualization.github.io/folium/latest/user_guide/plugins/vector_tiles.html
+
+
+# ===========================================
+# INTERNATIONALISATION
+# ===========================================
+
+def get_locale():
+    global TRANSLATIONS
+    # 1. Via URL param ?lang=fr/en
+    lang = request.args.get('lang')
+    if lang in TRANSLATIONS:
+        session['lang'] = lang
+        return lang
+    # 2. Via session
+    if 'lang' in session and session['lang'] in TRANSLATIONS:
+        return session['lang']
+    # 3. Via browser headers
+    accept = request.headers.get('Accept-Language', '')
+    for l in accept.split(','):
+        code = l.split('-')[0].strip()
+        if code in TRANSLATIONS:
+            return code
+    # 4. Default
+    return 'fr'
+
+def _(key, **kwargs):
+    global TRANSLATIONS
+    lang = get_locale()
+    txt = TRANSLATIONS[lang].get(key, key)
+    return txt.format(**kwargs) if kwargs else txt
 
 # ============================================
 # CONSTANTES & MAPPINGS
@@ -182,7 +228,7 @@ INFRASTRUCTURES = {
     'Mairie': 'mairie_distance',
     'Bus': 'arret_bus_distance_km',
     'Gare': 'gare_distance_km',
-    'ATM': 'atm_distance'
+    'Automate bancaire': 'atm_distance'
 }
 
 
@@ -195,11 +241,51 @@ def normalize_zone(classificationweb):
         return 'non classifié'
     return DEGURBA_MAPPING.get(str(classificationweb).lower().strip(), 'non classifié')
 
-def safe_float(value, default=0.0):
+""" def safe_float(value, default=0.0):
     try:
         return float(value) if pd.notna(value) else default
     except:
+        return default """
+
+def safe_float(value, default=0.0):
+    if isinstance(value, (list, np.ndarray, pd.Series)):
+        value = value.iloc[0] if hasattr(value, 'iloc') else value[0]
+    try:
+        return float(value) if pd.notna(value) else default
+    except:
+        print(f"Warning: could not convert '{value}' to float. Returning default value {default}.")
         return default
+    
+def distance_to_note(distance, infra, config_notes):
+    """
+    Convertit une distance en note (1-5) selon la table config_notes pour une infrastructure donnée.
+    - distance : valeur numérique de la distance
+    - infra : nom de l'infrastructure (ex: 'Hôpital') / Critère
+    - config_notes : DataFrame de correspondance
+    """
+    if isinstance(distance, (list, np.ndarray, pd.Series)):
+        distance = distance.iloc[0] if hasattr(distance, 'iloc') else distance[0]
+        
+    # Filtrer la table pour l'infrastructure concernée
+    table = config_notes[config_notes['Critère'] == infra]
+    #print(f"Calculating note for distance {distance} and infrastructure '{infra}'")
+    index = 0
+    for i, row in table.iterrows():
+        try:
+            min_val = float(row['Constat'])
+            if (index + 1) < len(table) : 
+                max_val = float(table.iloc[index + 1]['Constat'])  
+            else :
+                max_val = float('inf')
+            #print(f"""{min_val}  - {max_val} : {int(row['Note'])}""")
+            if min_val <= distance < max_val:
+                return int(row['Note'])
+        except Exception as e:
+            print(f"Error processing row {index} for infrastructure '{infra}': {e}")
+            continue
+        index = index+1
+    return None  # ou une note par défaut
+
 
 def  get_zone_shape(type_camp, classificationweb, color, actif) : 
     # &#9658; https://www.w3schools.com/charsets/ref_utf_geometric.asp drapeau sur fond blanc
@@ -742,10 +828,51 @@ def create_global_radar_chart(dataframe):
     return fig.to_html(full_html=False, include_plotlyjs='cdn', div_id='radarChart')
 
 
+# === 1. Créer une fonction pour le second radar chart avec les notes===
+def create_secondary_radar_chart(dataframe):
+    # Exemple : radar sur la médiane des notes (au lieu des distances)
+    categories = list(INFRASTRUCTURES.keys())
+    # On utilise la fonction distance_to_note pour chaque camp et chaque infra
+    notes_matrix = []
+    for _, row in dataframe.iterrows():
+        notes = [distance_to_note(row.get(col, 0), col, config_notes) or 0 for col in INFRASTRUCTURES.values()]
+        notes_matrix.append(notes)
+    notes_matrix = np.array(notes_matrix)
+    medians = np.median(notes_matrix, axis=0)
+    medians = list(medians) + [medians[0]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatterpolar(
+        r=medians,
+        theta=categories + [categories[0]],
+        mode='lines+markers',
+        name='Médiane des notes',
+        line=dict(color='purple', width=2),
+    ))
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(visible=True, range=[0, 5], gridcolor='#e5e7eb'),
+            angularaxis=dict(rotation=90, direction='clockwise')
+        ),
+        showlegend=True,
+        height=400,
+        margin=dict(l=40, r=40, t=40, b=40),
+        font=dict(size=11),
+        legend=dict(orientation="h", yanchor="bottom", y=-0.4, xanchor="center", x=0.5),
+        uirevision='constant'
+    )
+    return fig.to_html(full_html=False, include_plotlyjs='cdn', div_id='radarChart2')
+
+
 
 # ============================================
 # ROUTES
 # ============================================
+
+@app.before_request
+def before_request():
+    g.lang = get_locale()
+    
 @app.route("/")
 def index():
     map = create_camps_map(camps, new_camps)
@@ -757,15 +884,18 @@ def index():
     map_html = map._repr_html_()
 
     radar_html = create_global_radar_chart(camps)
+    radar2_html = create_secondary_radar_chart(camps)  # <--- Ajout du second radar
+
     info_message = session.pop('info_message', None)
-    
+    # ...idem pour add_camp, submit_camp, etc. Utilisez {{ _('key') }} pour tous les textes...
+
     template = """
     <!DOCTYPE html>
-    <html lang="fr">
+    <html lang="{{ g.lang }}">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Analyse Géographique des Camps de Migrants en Europe</title>
+        <title>{{ _('title') }}</title>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
@@ -784,6 +914,7 @@ def index():
             .map-section {grid-column:2; grid-row:1; overflow: hidden;}
             #map {height:100%; min-height:500px; border-radius:10px;}
             #radarChart {height:420px; width:100%;}
+            #radarChart2 {height:420px; width:100%;}
             .btn-add, .btn-about, .btn-clear {padding:18px; background:linear-gradient(135deg,#1f77b4,#125b86); color:white; border-radius:12px;
                       text-align:center; text-decoration:none; font-weight:600; font-size:18px; box-shadow:0 4px 15px rgba(31,119,180,0.3); cursor:pointer;}
             .btn-clear {background:linear-gradient(135deg,#dc2626,#991b1b);}
@@ -797,6 +928,12 @@ def index():
                 .content {grid-template-columns:1fr;}
                 .radar-section{grid-row:2;} .button-section{grid-row:3;} .map-section{grid-row:1;}
             }
+            /* Onglets des 2 radars */
+            .tab-container { margin-bottom: 20px; }
+            .tab-btn { background: #e2e8f0; border: none; padding: 10px 24px; cursor: pointer; font-weight:600; border-radius:8px 8px 0 0; margin-right:2px;}
+            .tab-btn.active { background: #667eea; color: white; }
+            .tab-content { display: none; }
+            .tab-content.active { display: block; }
         </style>
     </head>
     <body>
@@ -808,30 +945,42 @@ def index():
         {% endif %}
         <div class="container">
             <div class="header">
-                <h1>Analyse Géographique des Camps de Migrants en Europe</h1>
-                <p>Cartographie interactive et analyse des distances aux infrastructures essentielles</p>
+                <h1>{{ _('title') }}</h1>
+                <p>{{ _('subtitle') }}</p>
             </div>
             <div class="content">
                 <div class="section radar-section">
-                    <h2>Distances aux aménités socio-environnementales</h2>
+                    <h2>{{ _('radar_title') }}</h2>
                     <div class="camp-info" id="campInfo" style="display:none;">
                         <h3 id="campName"></h3>
                         <p id="campDetails"></p>
                     </div>
-                    <div id="radarChart">{{ radar_html|safe }}</div>
-                    <div style="text-align:center; margin-top:15px;">
-                        <button class="btn-clear" onclick="clearAllIndividualCamps()">Vider le radar</button>
+                    <div class="tab-container">
+                        <button class="tab-btn active" onclick="showTab('tab1')">{{ _('dist_profile') }}</button>
+                        <button class="tab-btn" onclick="showTab('tab2')">{{ _('note_profile') }}</button>
+                    </div>
+                    <div id="tab1" class="tab-content active">
+                        <div id="radarChart">{{ radar_html|safe }}</div>
+                        <div style="text-align:center; margin-top:15px;">
+                            <button class="btn-clear" onclick="clearAllIndividualCamps()">{{ _('clear_radar') }}</button>
+                        </div>
+                    </div>
+                    <div id="tab2" class="tab-content">
+                        <div id="radarChart2">{{ radar2_html|safe }}</div>
+                        <div style="text-align:center; margin-top:15px;">
+                            <button class="btn-clear" onclick="clearAllIndividualCamps()">{{ _('clear_radar') }}</button>
+                        </div>
                     </div>
                 </div>
 
                 <div class="section button-section">
                     <h2>Actions</h2>
-                    <a class="btn-add" href="{{ url_for('add_camp') }}">Ajouter un nouveau camp</a>
-                    <button class="btn-about" onclick="showAboutModal()">À propos</button>
+                    <a class="btn-add" href="{{ url_for('add_camp') }}">{{ _('add_camp') }}</a>
+                    <button class="btn-about" onclick="showAboutModal()">{{ _('about') }}</button>
                 </div>
 
                 <div class="section map-section">
-                    <h2>Carte des camps pour migrants en Europe et autour</h2>
+                    <h2>{{ _('map_title') }}</h2>
                     <div id="map">{{ map_html|safe }} </div> 
                 </div>
             </div>
@@ -841,22 +990,15 @@ def index():
         <div id="aboutModal" class="modal">
             <div class="modal-content">
                 <span class="close" onclick="closeAboutModal()">&times;</span>
-                <h2>À propos</h2>
+                <h2>{{ _('about') }}</h2>
                 
-                <p>Cette application propose une visualisation interactive des camps en Europe, base de données complétée et qualifiée de mars 2025, en collaboration avec Louis Fernier, doctorant à Migrinter.
-                <br>
-                L'application a été développée dans le cadre du Master 2 SPE à La Rochelle, UE Data to Information, en décembre 2025, sous la responsabilité de Christine Plumejeaud-Perreau, enseignante de l'UE par des étudiants du Master 2 SPE :
-                <ul><li>Damien Glo</li><li>Killian Lheote</li><li>Joseph Fournier.</li>    
-                </ul>
-                <br>
-                C'est un prototype visant à démontrer les capacités d'exploration et visualisation des profils des camps avec Python (3.10). Il nécessite des améliorations pour une utilisation en production (en particulier pour le formulaire de saisie de nouveaux camps qui ne fonctionne pas). <br>
-                </p>
-                <p>Développé avec Flask, Folium, et Plotly, le code source est disponible sur le github de l'enseignante, sous licence Affero GPL v3.</p>
+                <p>{{ _('about_text')|safe }}</p>
+                
             </div>
         </div>
 
         <script>
-
+            //Fonctions pour les onglets des radars
             const visibleCamps = new Set();
             let originalMaxRange = 50; // Valeur par défaut, sera mise à jour au chargement
 
@@ -909,8 +1051,11 @@ def index():
             window.toggleRadarForCamp = function(campId, campName) {
                 const radarDiv = document.getElementById('radarChart');
                 if (!radarDiv.data) return;
-
+                const radarDiv2 = document.getElementById('radarChart2');
+                if (!radarDiv2.data) return;
+                
                 const traceIndex = radarDiv.data.findIndex(t => t.name === campName);
+                const traceIndex2 = radarDiv2.data.findIndex(t => t.name === campName);
 
                 if (traceIndex === -1) {
                     // === AJOUTER LE CAMP ===
@@ -921,6 +1066,7 @@ def index():
                                 alert(data.info);
                                 return;
                             }
+                            const notes = [...data.notes, data.notes[0]];
                             const dist = [...data.distances, data.distances[0]];
                             const cat = [...data.categories, data.categories[0]];
                             const color = colors[visibleCamps.size % colors.length];
@@ -935,20 +1081,31 @@ def index():
                                 //  fillcolor: color.replace(')', ', 0.2)').replace('rgb', 'rgba'), // Remplissage plus transparent
                                 opacity: 0.6
                             }]);
+                            
+                            Plotly.addTraces('radarChart2', [{
+                                type: 'scatterpolar',
+                                r: notes,
+                                theta: cat,
+                                fill: 'toself',
+                                name: data.nom,
+                                line: { color: color, width: 2 }, // Trait plus fin
+                                //  fillcolor: color.replace(')', ', 0.2)').replace('rgb', 'rgba'), // Remplissage plus transparent
+                                opacity: 0.6
+                            }]);
 
                             visibleCamps.add(data.nom);
                             updateRadarScale();
 
                             // Info camp
                             document.getElementById('campName').textContent = data.nom;
-                            document.getElementById('campDetails').textContent = `Type: ${data.type} | Zone: ${data.zone}`;
+                            document.getElementById('campDetails').textContent = `Type: ${data.type} | Classification: ${data.zone}`;
                             document.getElementById('campInfo').style.display = 'block';
 
                             // Changer le bouton en "Masquer"
                             setTimeout(() => {
                                 const btn = document.querySelector(`button[onclick="window.parent.toggleRadarForCamp(${campId}, '${campName.replace(/'/g, "\\'")}')"]`);
                                 if (btn) {
-                                    btn.textContent = "Masquer du radar";
+                                    btn.textContent = "Masquer du radar" ;
                                     btn.style.background = "#991b1b";
                                 }
                             }, 100);
@@ -956,6 +1113,8 @@ def index():
                 } else {
                     // === SUPPRIMER LE CAMP ===
                     Plotly.deleteTraces('radarChart', traceIndex);
+                    Plotly.deleteTraces('radarChart2', traceIndex2);
+
                     visibleCamps.delete(campName);
                     updateRadarScale();
 
@@ -979,19 +1138,31 @@ def index():
             function clearAllIndividualCamps() {
                 const radarDiv = document.getElementById('radarChart');
                 if (!radarDiv.data || radarDiv.data.length <= 2) return;
-
+               
                 // Supprimer tous les tracés sauf les 2 premiers (moyenne + médiane)
                 const tracesToRemove = [];
                 for (let i = radarDiv.data.length - 1; i >= 2; i--) {
                     tracesToRemove.push(i);
                 }
-
                 Plotly.deleteTraces('radarChart', tracesToRemove);
+
+                const radarDiv2 = document.getElementById('radarChart2');
+                if (!radarDiv2.data || radarDiv2.data.length <= 2) return;
+                // Supprimer tous les tracés sauf le premier ( médiane)
+                const tracesToRemove2 = [];
+                for (let i = radarDiv2.data.length - 1; i >= 1; i--) {
+                    tracesToRemove2.push(i);
+                }
+                Plotly.deleteTraces('radarChart2', tracesToRemove2);
+
                 visibleCamps.clear();
                 document.getElementById('campInfo').style.display = 'none';
 
                 // Remettre l'échelle d'origine (calculée automatiquement)
                 Plotly.relayout('radarChart', {
+                    'polar.radialaxis.range': [0, 5]
+                });
+                Plotly.relayout('radarChart2', {
                     'polar.radialaxis.range': [0, 5]
                 });
 
@@ -1023,18 +1194,33 @@ def index():
                     modal.style.display = 'none';
                 }
             }
+            
+            // Onglets radar
+            function showTab(tabId) {
+                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+                if(tabId==='tab1'){
+                    document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+                }else{
+                    document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+                }
+                document.getElementById(tabId).classList.add('active');
+            }
         </script>
     </body>
     </html>
     """
     #return render_template_string(template, mapheader=mapheader, mapbody_html=mapbody_html, mapscript=mapscript, radar_html=radar_html)
-    return render_template_string(template, map_html=map_html, radar_html=radar_html, info_message=info_message)
+    return render_template_string(template, map_html=map_html, radar_html=radar_html, radar2_html=radar2_html, info_message=info_message,  _=_)
 
 @app.route("/get_camp_data/<int:camp_id>")
 def get_camp_data(camp_id):
     try:
         camp = camps.iloc[camp_id]
         distances = [safe_float(camp.get(col, 0)) for col in INFRASTRUCTURES.values()]
+        global config_notes
+        notes = [distance_to_note(camp.get(col, 0),col, config_notes) for col in INFRASTRUCTURES.values()]
+
         #Si toutes les distances sont nulles ou invalides, on peut choisir de ne pas afficher le radar pour ce camp
         if all((d is None or d == 0) for d in distances):
             return jsonify({
@@ -1046,6 +1232,7 @@ def get_camp_data(camp_id):
             'type': str(camp.get('type_camp', 'N/A')),
             'zone': normalize_zone(camp.get('degurba')),
             'distances': distances,
+            'notes': notes,
             'categories': list(INFRASTRUCTURES.keys())
         })
     except Exception as e:
@@ -1135,83 +1322,83 @@ def add_camp():
     </div>
     '''
     
-    template = f"""
+    template = """
     <!DOCTYPE html>
-    <html lang="fr">
+    <html lang="{{ g.lang }}">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Ajouter un camp</title>
+        <title>{{ _('add_title') }}</title>
         <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 min-height: 100vh;
                 padding: 20px;
-            }}
-            .form-container {{
+            }
+            .form-container {
                 max-width: 900px;
                 margin: 0 auto;
                 background: white;
                 border-radius: 20px;
                 box-shadow: 0 20px 60px rgba(0,0,0,0.3);
                 overflow: hidden;
-            }}
-            .form-header {{
+            }
+            .form-header {
                 background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
                 color: white;
                 padding: 30px;
                 text-align: center;
-            }}
-            .form-header h1 {{
+            }
+            .form-header h1 {
                 font-size: 2em;
                 margin-bottom: 10px;
-            }}
-            .form-content {{
+            }
+            .form-content {
                 padding: 40px;
-            }}
-            .form-category {{
+            }
+            .form-category {
                 margin-bottom: 30px;
                 padding: 20px;
                 background: #f8f9fa;
                 border-radius: 10px;
-            }}
-            .form-category h3 {{
+            }
+            .form-category h3 {
                 color: #2d3748;
                 margin-bottom: 15px;
                 padding-bottom: 10px;
                 border-bottom: 2px solid #667eea;
-            }}
-            .form-group {{
+            }
+            .form-group {
                 margin-bottom: 15px;
-            }}
-            .form-group label {{
+            }
+            .form-group label {
                 display: block;
                 font-weight: 600;
                 color: #4a5568;
                 margin-bottom: 5px;
-            }}
-            .form-group input {{
+            }
+            .form-group input {
                 width: 100%;
                 padding: 10px;
                 border: 2px solid #e2e8f0;
                 border-radius: 8px;
                 font-size: 14px;
                 transition: all 0.3s ease;
-            }}
-            .form-group input:focus {{
+            }
+            .form-group input:focus {
                 outline: none;
                 border-color: #667eea;
                 box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-            }}
-            .form-actions {{
+            }
+            .form-actions {
                 display: flex;
                 gap: 15px;
                 justify-content: center;
                 margin-top: 30px;
-            }}
-            .btn {{
+            }
+            .btn {
                 padding: 12px 30px;
                 border: none;
                 border-radius: 8px;
@@ -1221,38 +1408,38 @@ def add_camp():
                 transition: all 0.3s ease;
                 text-decoration: none;
                 display: inline-block;
-            }}
-            .btn-submit {{
+            }
+            .btn-submit {
                 background: #667eea;
                 color: white;
-            }}
-            .btn-submit:hover {{
+            }
+            .btn-submit:hover {
                 background: #5568d3;
                 transform: translateY(-2px);
                 box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-            }}
-            .btn-cancel {{
+            }
+            .btn-cancel {
                 background: #e2e8f0;
                 color: #4a5568;
-            }}
-            .btn-cancel:hover {{
+            }
+            .btn-cancel:hover {
                 background: #cbd5e0;
-            }}
+            }
         </style>
     </head>
     <body>
         <div class="form-container">
             <div class="form-header">
-                <h1>➕ Ajouter un nouveau camp</h1>
-                <p>Remplissez les informations ci-dessous</p>
-                <p>Ne saisissez pas de point-virgules (;) dans les champs sinon la saisie sera refusée</p>
+                <h1>{{ _('add_title') }}</h1>
+                <p>{{ _('add_subtitle') }}</p>
+                <p>{{ _('add_warning') }} </p>
             </div>
             <div class="form-content">
-                <form method="post" action="{{{{ url_for('submit_camp') }}}}">
-                    {form_fields}
+                <form method="post" action="{{submit_url}}">
+                    {{ form_fields|safe }}
                     <div class="form-actions">
-                        <button type="submit" class="btn btn-submit">✓ Enregistrer</button>
-                        <a href="{{{{ url_for('index') }}}}" class="btn btn-cancel">← Annuler</a>
+                        <button type="submit" class="btn btn-submit">{{ _('save')}} </button>
+                        <a href="{{index_url}}" class="btn btn-cancel">{{ _('cancel')}} </a>
                     </div>
                 </form>
             </div>
@@ -1260,7 +1447,12 @@ def add_camp():
     </body>
     </html>
     """
-    return render_template_string(template)
+    submit_url = url_for('submit_camp')
+    index_url = url_for('index') 
+    print(form_fields)  # Debug: afficher les champs générés
+    print(submit_url)  # Debug: afficher l'url de soumission
+    
+    return render_template_string(template, _=_, form_fields=form_fields, submit_url=submit_url, index_url=index_url)
 
 # --- Traitement des données saisies ---
 @app.route("/submit_camp", methods=["POST"])
@@ -1271,7 +1463,8 @@ def submit_camp():
     
     if not user_captcha or user_captcha != correct_captcha:
         # Invalid captcha, redirect back to form
-        session['info_message'] = "Erreur de vérification : la réponse au captcha est incorrecte."
+        session['info_message'] = _('error_captcha') 
+        #"Erreur de vérification : la réponse au captcha est incorrecte."
         return redirect(url_for('add_camp'))
     
     global new_camps
@@ -1296,4 +1489,4 @@ def submit_camp():
 
 
 if __name__ == "__main__":
-    app.run(debug=False,  port=5000) #use_reloader=False,
+    app.run(debug=True,  port=5000) #use_reloader=False,
