@@ -1326,13 +1326,18 @@ def add_camp():
     #print('----------------------config_countries.columns----------------------')
     #print(config_countries.columns)
     
+    ##Calculer le pays à partir des coordonnées si possible pour pré-remplir le champ pays et éviter les erreurs de saisie
     computed_country_name = ""
     if lat and lng:
         computed_country_code = get_country_from_coordinates(lat, lng)
         if computed_country_code:
             computed_country_name = config_countries.loc[config_countries['alpha3'] == computed_country_code, 'name'].values[0]
             #print(f"Pays calculé à partir des coordonnées : {computed_country_name} ({computed_country_code})")
-       
+    ## Liste des infrastructures pour le champ "infrastructure_norm" avec gestion des valeurs manquantes et tri
+    liste_infrastructure = pd.unique(camps.infrastructure_norm.fillna('Autre'))  # Assurer que les valeurs manquantes sont traitées comme "Autre"
+    liste_infrastructure = sorted(liste_infrastructure, key=lambda x: str(x).lower())  # Tri lexicographique insensible à la casse
+
+    
     form_fields = ""
     for cat_name, cols in categories.items():
         form_fields += f'<div class="form-category"><h3>{cat_name}</h3>'
@@ -1385,38 +1390,47 @@ def add_camp():
                         <input type="date" id="{col}" name="{col}" value="{value}">
                     </div>
                     """
-            elif col in ['hommes', 'femmes', 'mineurs']:
+            elif col == 'hommes':
                 label_trad = _('camps_genre') 
                 label_trad_hommes = _('hommes') 
                 label_trad_femmes = _('femmes') 
                 label_trad_mineurs = _('mineurs') 
                 form_fields += f"""
                     <div class="form-group checkbox-inline">
-                        <input type="checkbox" id="{col}" name="{col}" value="oui">
-                        <label for="{col}">{col.capitalize()}</label>
+                        <label style="font-weight:600; color:#4a5568; margin-bottom:5px; display:block;">{label_trad}</label>
+                        <div class="checkbox-row">
+                            <input type="checkbox" id="hommes" name="hommes" value="oui">
+                            <label for="hommes">{label_trad_hommes}</label>
+                            <input type="checkbox" id="femmes" name="femmes" value="oui">
+                            <label for="femmes">{label_trad_femmes}</label>
+                            <input type="checkbox" id="mineurs" name="mineurs" value="oui">
+                            <label for="mineurs">{label_trad_mineurs}</label>
+                        </div>
                     </div>
-                    """
-                # form_fields += f"""
-                #     <div class="form-group checkbox-inline">
-                #         <label style="font-weight:600; color:#4a5568; margin-bottom:5px; display:block;">{label_trad}</label>
-                #         <div class="checkbox-row">
-                #             <input type="checkbox" id="hommes" name="hommes" value="oui">
-                #             <label for="hommes">{label_trad_hommes}</label>
-                #             <input type="checkbox" id="femmes" name="femmes" value="oui">
-                #             <label for="femmes">{label_trad_femmes}</label>
-                #             <input type="checkbox" id="mineurs" name="mineurs" value="oui">
-                #             <label for="mineurs">{label_trad_mineurs}</label>
-                #         </div>
-                #     </div>
-                # """
+                """
+            elif col in ['femmes', 'mineurs']:
+                continue  # On ne génère pas deux fois les cases
+            elif col == 'infrastructure_norm':
+                label_trad = _('infrastructure_norm') 
+                options = ""
+                for infra in liste_infrastructure:
+                    options += f'<option value="{infra}">{infra}</option>'
+                form_fields += f"""
+                    <div class="form-group">
+                        <label for="{col}">{_(col)}</label> 
+                        <select id="{col}" name="{col}">
+                            <option value="">Sélectionnez une infrastructure</option>
+                            {options}       
+                        </select>
+                    </div>
+                """
+                
             elif col == 'pays':
                 options = ""
                 #Sélectionner le pays calculé à partir de la lat/lng si possible
-
                 for index, row  in config_countries.iterrows() :
                     options += f'<option value="{row["alpha3"]}">{row["name"]}</option>'
                 #print(options)
-                #first_option = f'<option value="" {"selected" if not computed_country_name else ""}>Sélectionnez un pays</option>'
                 if computed_country_name:
                     options = f'<option value="{computed_country_code}" selected>{computed_country_name}</option>' + options
                 form_fields += f"""
@@ -1427,11 +1441,21 @@ def add_camp():
                             {options}
                         </select>
                     </div>"""
+            elif col=='comment' or col=='bdd_source':
+                label_trad = _(col) 
+                form_fields += f"""
+                    <div class="form-group">
+                        <label for="{col}">{label_trad}</label>
+                        <textarea id="{col}" name="{col}" rows="5" style="width:100%; resize:vertical; border-radius:8px; border:2px solid #e2e8f0; padding:10px; font-size:14px;"></textarea>
+                    </div>
+                """
             else:    
+                label_trad = _(col) 
+                #placeholder="Entrez {col}"
                 form_fields += f"""
                 <div class="form-group">
-                    <label for="{col}">{col}</label>
-                    <input type="text" id="{col}" name="{col}" placeholder="Entrez {col}" value="{value}">
+                    <label for="{col}">{label_trad}</label>
+                    <input type="text" id="{col}" name="{col}"  value="{value}">
                 </div>
             """
         form_fields += '</div>'
@@ -1556,7 +1580,7 @@ def add_camp():
             /* Aligner les boutons radio sur une ligne */            
             /* Aligner les boutons radio à gauche et rapprocher le texte */
             .radio-inline {
-                width: auto;
+                width: 70%;
                 display: flex;              /* Utiliser display: ruby pour un alignement plus précis */
                 gap: 10px;                /* Moins d'espace entre chaque groupe radio+label */
                 align-items: center;
@@ -1592,6 +1616,24 @@ def add_camp():
                 outline: none;
                 border-color: #667eea;
                 box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+            }
+            /*style pour les cases à cocher en ligne*/
+            .checkbox-row {
+                width: 70%;
+                display: flex;
+                gap: 5px;
+                align-items: center;
+                margin-left: 0;
+                padding-left: 0;
+            }
+            .checkbox-row label {
+                margin-left: 4px;
+                margin-right: 4px;
+                font-weight: normal;
+                display: inline-block;
+            }
+            .checkbox-row input[type="checkbox"] {
+                margin-right: 0;
             }
         </style>
     </head>
@@ -1642,7 +1684,7 @@ def submit_camp():
     derniere_date_info = request.form.get('derniere_date_info')   
     latitude = request.form.get('camp_latitude')
     longitude = request.form.get('camp_longitude')  
-    if not nom_unique or not type_camp or not actif_dernieres_infos or not derniere_date_info or not camp_latitude or not camp_longitude:
+    if not nom_unique or not type_camp or not actif_dernieres_infos or not derniere_date_info or not latitude or not longitude:
         session['info_message'] = _('error_mandatory') 
         #"Erreur : veuillez remplir tous les champs obligatoires (nom unique, type de camp, actif ou non, date de la dernière information, et les coordonnées géographiques du camp)."
         return redirect(url_for('add_camp')) 
