@@ -17,6 +17,7 @@ import error
 
 import pandas.io.sql as sql
 from sqlalchemy import create_engine, text as sql_text
+from datetime import datetime
 
 
 # ============================================
@@ -42,7 +43,7 @@ STATIC_PATH = os.path.join(BASE_DIR, 'static/')
 
 CSVFILE_PATH = os.path.join(BASE_DIR, r"new_camps.csv")
 
-CONFIGFILE_PATH = os.path.join(BASE_DIR, r"config_notes_isolement.xlsx")
+CONFIGFILE_PATH = os.path.join(BASE_DIR, r"config_webapp.xlsx")
 
 # ============================================
 # INIT the app
@@ -109,7 +110,7 @@ def load_data():
         
         ORM_conn=engine.connect()
         ORM_conn
-        print(ORM_conn)
+        #print(ORM_conn)
         
         df = pd.read_sql_query(con=ORM_conn, sql=sql_text(QueryTous))
 
@@ -127,7 +128,9 @@ def load_data():
         except:
             df = pd.read_csv(FILE_PATH, sep=';', encoding='latin1', on_bad_lines='skip')
     df.columns = df.columns.str.strip()
-    df['derniere_date_info'] = pd.to_numeric(df['derniere_date_info'], errors='coerce').astype('Int64')
+
+    #df['derniere_date_info'] = pd.to_numeric(df['derniere_date_info'], errors='coerce').astype('Int64')
+    df['derniere_date_info'] = pd.to_datetime(df['derniere_date_info'], errors='coerce', format='%Y')
     
     return df
 
@@ -141,6 +144,8 @@ def load_shapefile(filepath):
 
 config_notes  = pd.read_excel(CONFIGFILE_PATH, sheet_name='2024-11-25_indices_isolement', skiprows=1)
 config_translations  = pd.read_excel(CONFIGFILE_PATH, sheet_name='traductions')
+config_countries = pd.read_excel(CONFIGFILE_PATH, sheet_name='codes_iso3166_2024-06-19', skiprows=1)
+#print(config_countries.shape)
 
 TRANSLATIONS = dict()
 for _, col in config_translations.columns.to_series().items():
@@ -163,6 +168,7 @@ formColumns = ['nom_unique', 'camp_latitude', 'camp_longitude', 'camp_adresse', 
 ## Lire les données existantes dans le csv au démarrage du serveur pour les réintégrer dans la carte
 if os.path.exists(CSVFILE_PATH) :
     new_camps = pd.read_csv(CSVFILE_PATH, sep=";") 
+    new_camps['derniere_date_info'] = pd.to_datetime(new_camps['derniere_date_info'], errors='coerce', format='%Y-%m-%d')
 else :
     new_camps = pd.DataFrame(columns=formColumns)  # DataFrame pour les nouveaux camps ajoutés 
 
@@ -236,6 +242,14 @@ INFRASTRUCTURES = {
 # ============================================
 # UTILITAIRES
 # ============================================
+
+def get_country_from_coordinates(lat, lng):
+    point = gpd.points_from_xy([lng], [lat], crs="EPSG:4326")
+    for idx, row in gdf_countries.iterrows():
+        if row['geometry'].contains(point[0]):
+            return row['ADM0_A3']  # ou 'name' selon ce que vous voulez retourner
+    return None
+
 def normalize_zone(classificationweb):
     if not classificationweb or pd.isna(classificationweb):
         return 'non classifié'
@@ -415,8 +429,15 @@ def create_camps_map(dataframe, newcamps):
     camps_actifs_layer = folium.FeatureGroup(name="Camps actifs", show=True)
     camps_inactifs_layer = folium.FeatureGroup(name="Camps désaffectés", show=False)
 
+
     for idx, row in dataframe.iterrows():
-        actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (int(row.get('derniere_date_info', 0)) >= 2018)
+        #print(f"Processing camp {idx} - {row.get('nom_unique', 'N/A')}")
+        date_objet = row.get('derniere_date_info', None) if  not pd.isnull(row.get('derniere_date_info', None)) else datetime.strptime('2000', '%Y')
+        #print(date_objet)
+        annee_derniere_date_info = int(date_objet.year) 
+        #print(annee_derniere_date_info)
+        
+        actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (annee_derniere_date_info >= 2018)
         
         #Attention, ce n'était pas degurba qu'il fallait cartographié (changer le fichier source)
         zone = normalize_zone(row.get('classificationweb'))
@@ -519,19 +540,25 @@ def create_camps_map(dataframe, newcamps):
     VectorGridProtobuf(url, "DEGURBA (Eurostat 2018)", options, show=False).add_to(m)
 
     # Nouveaux camps ajoutés via le formulaire
+    print("Nouveaux camps ajoutés via le formulaire")
     newcamps_clean = newcamps.dropna(subset=['camp_latitude', 'camp_longitude']).copy().reset_index(drop=True)
     if not newcamps_clean.empty:
-        print(newcamps_clean.shape)
+        #print(newcamps_clean.shape)
         #print(newcamps_clean.columns)
         for idx, row in newcamps_clean.iterrows():
             zone = 'non vérifié'
             color = ZONE_COLORS[zone]
-            actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (int(row.get('derniere_date_info', 0)) >= 2018)
+            
+            #print(f"Processing new camp {idx} - {row.get('nom_unique', 'Camp inconnu')} - {row.get('derniere_date_info', 'N/A')}")
+            date_objet = row.get('derniere_date_info', None) if  not pd.isnull(row.get('derniere_date_info', None)) else datetime.strptime('2000', '%Y')
+            annee_derniere_date_info = date_objet.year         
+            #print(annee_derniere_date_info)  
+            actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (annee_derniere_date_info >= 2018)
             #icon_html = f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid {color};border-bottom-color:{color};"></div>"""
             icon_html = get_zone_shape(row.get('type_camp'), zone, color, actif)
             icon = folium.DivIcon(html=icon_html, icon_size=(10,10), icon_anchor=(7,7))
 
-        
+            
             camp_name = row.get('nom_unique', 'Camp inconnu').replace("'", "\\'")
 
             popup_html = f"""
@@ -1284,14 +1311,28 @@ def add_camp():
     
     # Organiser les champs par catégorie
     categories = {
-        'Informations générales': ['nom_unique', 'type_camp', 'capacite'],
-        'Localisation': ['camp_latitude', 'camp_longitude', 'camp_adresse', 'pays'],
-        'Détails': ['ouverture/premiere_date', 'fermeture_date', 'actif_dernieres_infos', 'derniere_date_info', 'infrastructure_norm', 'infrastructure_avant_conversion', 'hommes', 'femmes', 'mineurs'],
-        'Métadonnées' : ['bdd_source', 'mail_contributeur', 'comment']
+        _('form_cat01_Informations'): ['nom_unique', 'type_camp', 'actif_dernieres_infos', 'derniere_date_info'],
+        _('form_cat02_Localisation'): ['camp_latitude', 'camp_longitude', 'camp_adresse', 'pays'],
+        _('form_cat03_Details'): ['capacite', 'hommes', 'femmes', 'mineurs', 'ouverture/premiere_date', 'fermeture_date',  'infrastructure_norm', 'infrastructure_avant_conversion'],
+        _('form_cat04_Metadata') : ['bdd_source', 'mail_contributeur', 'comment']
         #'Distances infrastructures': [col for col in champs if 'distance' in col.lower()],
         #'Autres': [col for col in champs if col not in ['nom_unique', 'type_camp', 'degurba', 'camp_latitude', 'camp_longitude', 'pays'] and 'distance' not in col.lower()]
     }
     
+    ## Crer une liste des pays avec autocompletion qui renseigne avec le code ISO3
+    #URL : https://github.com/lukes/ISO-3166-Countries-with-Regional-Codes/blob/master/all/all.csv
+    global config_countries
+    config_countries.rename(columns={'alpha-3': 'alpha3'}, inplace=True)  # Renommer pour éviter les problèmes de tirets dans les noms de champs
+    #print('----------------------config_countries.columns----------------------')
+    #print(config_countries.columns)
+    
+    computed_country_name = ""
+    if lat and lng:
+        computed_country_code = get_country_from_coordinates(lat, lng)
+        if computed_country_code:
+            computed_country_name = config_countries.loc[config_countries['alpha3'] == computed_country_code, 'name'].values[0]
+            #print(f"Pays calculé à partir des coordonnées : {computed_country_name} ({computed_country_code})")
+       
     form_fields = ""
     for cat_name, cols in categories.items():
         form_fields += f'<div class="form-category"><h3>{cat_name}</h3>'
@@ -1301,16 +1342,102 @@ def add_camp():
             if col == 'camp_latitude' and lat:
                 value = lat
             elif col == 'camp_longitude' and lng:
-                value = lng
-            
-            form_fields += f"""
-            <div class="form-group">
-                <label for="{col}">{col}</label>
-                <input type="text" id="{col}" name="{col}" placeholder="Entrez {col}" value="{value}">
-            </div>
+                value = lng  
+                    
+            if col == 'type_camp':
+                label_trad = _('type_camp')
+                label_trad_open = _('type_camp_open')
+                label_trad_closed = _('type_camp_closed')
+                label_trad_clopen = _('type_camp_clopen')
+                form_fields += f"""
+                    <div class="form-group">
+                        <label for="{col}">{label_trad}</label> 
+                        <div class="radio-inline">
+                            <input type="radio" id="{col}_ouvert" name="{col}" value="ouvert">
+                            <label for="{col}_ouvert">{label_trad_open}</label>
+                            <input type="radio" id="{col}_fermé" name="{col}" value="fermé">
+                            <label for="{col}_fermé">{label_trad_closed}</label>
+                            <input type="radio" id="{col}_semi-ouvert" name="{col}" value="semi-ouvert">
+                            <label for="{col}_semi-ouvert">{label_trad_clopen}</label>
+                        </div>
+                    </div>
+                    """
+            elif col == 'actif_dernieres_infos':
+                label_trad = _('actif_dernieres_infos')
+                label_trad_oui = _('actif_dernieres_infos_oui')
+                label_trad_non = _('actif_dernieres_infos_non')
+                form_fields += f"""
+                    <div class="form-group">
+                        <label for="{col}">{label_trad}</label>
+                        <div class="radio-inline">
+                            <input type="radio" id="{col}_oui" name="{col}" value="oui">
+                            <label for="{col}_oui">{label_trad_oui}</label>
+                            <input type="radio" id="{col}_non" name="{col}" value="non">
+                            <label for="{col}_non">{label_trad_non}</label>
+                        </div>
+                    </div>
+                    """
+            elif col == 'derniere_date_info' or col == 'ouverture/premiere_date' or col == 'fermeture_date':
+                label_trad = _(col)
+                form_fields += f"""
+                    <div class="form-group">
+                        <label for="{col}">{label_trad}</label>
+                        <input type="date" id="{col}" name="{col}" value="{value}">
+                    </div>
+                    """
+            elif col in ['hommes', 'femmes', 'mineurs']:
+                label_trad = _('camps_genre') 
+                label_trad_hommes = _('hommes') 
+                label_trad_femmes = _('femmes') 
+                label_trad_mineurs = _('mineurs') 
+                form_fields += f"""
+                    <div class="form-group checkbox-inline">
+                        <input type="checkbox" id="{col}" name="{col}" value="oui">
+                        <label for="{col}">{col.capitalize()}</label>
+                    </div>
+                    """
+                # form_fields += f"""
+                #     <div class="form-group checkbox-inline">
+                #         <label style="font-weight:600; color:#4a5568; margin-bottom:5px; display:block;">{label_trad}</label>
+                #         <div class="checkbox-row">
+                #             <input type="checkbox" id="hommes" name="hommes" value="oui">
+                #             <label for="hommes">{label_trad_hommes}</label>
+                #             <input type="checkbox" id="femmes" name="femmes" value="oui">
+                #             <label for="femmes">{label_trad_femmes}</label>
+                #             <input type="checkbox" id="mineurs" name="mineurs" value="oui">
+                #             <label for="mineurs">{label_trad_mineurs}</label>
+                #         </div>
+                #     </div>
+                # """
+            elif col == 'pays':
+                options = ""
+                #Sélectionner le pays calculé à partir de la lat/lng si possible
+
+                for index, row  in config_countries.iterrows() :
+                    options += f'<option value="{row["alpha3"]}">{row["name"]}</option>'
+                #print(options)
+                #first_option = f'<option value="" {"selected" if not computed_country_name else ""}>Sélectionnez un pays</option>'
+                if computed_country_name:
+                    options = f'<option value="{computed_country_code}" selected>{computed_country_name}</option>' + options
+                form_fields += f"""
+                    <div class="form-group">
+                        <label for="{col}">{col}</label>
+                        <select id="{col}" name="{col}">
+                            <option value="">Sélectionnez un pays</option>
+                            {options}
+                        </select>
+                    </div>"""
+            else:    
+                form_fields += f"""
+                <div class="form-group">
+                    <label for="{col}">{col}</label>
+                    <input type="text" id="{col}" name="{col}" placeholder="Entrez {col}" value="{value}">
+                </div>
             """
         form_fields += '</div>'
     
+
+            
     # Add captcha field
     form_fields += f'''
     <div class="form-category">
@@ -1372,6 +1499,7 @@ def add_camp():
             }
             .form-group {
                 margin-bottom: 15px;
+
             }
             .form-group label {
                 display: block;
@@ -1380,7 +1508,7 @@ def add_camp():
                 margin-bottom: 5px;
             }
             .form-group input {
-                width: 100%;
+                width: 70%;
                 padding: 10px;
                 border: 2px solid #e2e8f0;
                 border-radius: 8px;
@@ -1425,6 +1553,46 @@ def add_camp():
             .btn-cancel:hover {
                 background: #cbd5e0;
             }
+            /* Aligner les boutons radio sur une ligne */            
+            /* Aligner les boutons radio à gauche et rapprocher le texte */
+            .radio-inline {
+                width: auto;
+                display: flex;              /* Utiliser display: ruby pour un alignement plus précis */
+                gap: 10px;                /* Moins d'espace entre chaque groupe radio+label */
+                align-items: center;
+                justify-content: flex-start; /* alignement à gauche */
+                margin-left: 0;
+                padding-left: 0;
+            }
+            .radio-inline label {
+                margin-left: 2px;         /* Très peu d'espace entre radio et texte */
+                margin-right: 8px;        /* Optionnel : espace après chaque label */
+                font-weight: normal;
+                display: inline-block;
+            }
+            .radio-inline input[type="radio"] {
+                margin-right: 0;
+            }
+            /* Style arrondi et moderne pour le select pays */
+            .form-group select {
+                width: 100%;
+                padding: 10px;
+                border: 2px solid #e2e8f0;
+                border-radius: 8px;
+                font-size: 14px;
+                background: #fff;
+                color: #4a5568;
+                transition: border-color 0.3s, box-shadow 0.3s;
+                appearance: none;
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.05);
+            }
+            .form-group select:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+            }
         </style>
     </head>
     <body>
@@ -1449,8 +1617,8 @@ def add_camp():
     """
     submit_url = url_for('submit_camp')
     index_url = url_for('index') 
-    print(form_fields)  # Debug: afficher les champs générés
-    print(submit_url)  # Debug: afficher l'url de soumission
+    #print(form_fields)  # Debug: afficher les champs générés
+    #print(submit_url)  # Debug: afficher l'url de soumission
     
     return render_template_string(template, _=_, form_fields=form_fields, submit_url=submit_url, index_url=index_url)
 
@@ -1467,6 +1635,19 @@ def submit_camp():
         #"Erreur de vérification : la réponse au captcha est incorrecte."
         return redirect(url_for('add_camp'))
     
+    # Verify mandatory fields (e.g., nom_unique, type_camp)
+    nom_unique = request.form.get('nom_unique')
+    type_camp = request.form.get('type_camp')   
+    actif_dernieres_infos = request.form.get('actif_dernieres_infos')   
+    derniere_date_info = request.form.get('derniere_date_info')   
+    latitude = request.form.get('camp_latitude')
+    longitude = request.form.get('camp_longitude')  
+    if not nom_unique or not type_camp or not actif_dernieres_infos or not derniere_date_info or not camp_latitude or not camp_longitude:
+        session['info_message'] = _('error_mandatory') 
+        #"Erreur : veuillez remplir tous les champs obligatoires (nom unique, type de camp, actif ou non, date de la dernière information, et les coordonnées géographiques du camp)."
+        return redirect(url_for('add_camp')) 
+    
+    
     global new_camps
     new_data = {col: request.form.get(col) for col in new_camps.columns}
     #Tester que les données ne contiennent pas de point-virgule (car sinon ça casse le csv)
@@ -1474,16 +1655,20 @@ def submit_camp():
         if value and ';' in value:
             #print(f"Invalid input for {key}: contains semicolon")  
             #On indique quel champ est concerné dans le message d'erreur   
-            session['info_message'] = f"Erreur : le champ '{key}' contient un point-virgule, ce qui n'est pas autorisé."
+            session['info_message'] = _('error_semicolon').format(key=key) 
+            #f"Erreur : le champ '{key}' contient un point-virgule, ce qui n'est pas autorisé."
             return redirect(url_for('add_camp'))
     try:
         new_camps = pd.concat([new_camps, pd.DataFrame([new_data])], ignore_index=True)
+        new_camps['derniere_date_info'] = pd.to_datetime(new_camps['derniere_date_info'], errors='coerce', format='%Y-%m-%d')
+
         #print("Data added successfully")
         #Sauver le camps dans un csv pour garder une trace (optionnel)
         new_camps.to_csv(CSVFILE_PATH, index=False, mode='w', sep=';')
-        session['info_message'] = "Le camp a bien été ajouté et enregistré."
+        session['info_message'] = _('success_add')
     except Exception as e:
-        session['info_message'] = f"Erreur lors de l'ajout du camp : {e}"
+        session['info_message'] = _('failure_add').format(e=e) 
+        # f"Erreur lors de l'ajout du camp : {e}"
         print(f"Error adding data: {e}")
     return redirect(url_for('index'))
 
