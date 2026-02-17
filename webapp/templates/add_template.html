@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="{{ lang }}">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{ _('add_title') }}</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+            .form-container {
+                max-width: 900px;
+                margin: 0 auto;
+                background: white;
+                border-radius: 20px;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                overflow: hidden;
+            }
+            .form-header {
+                background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+                color: white;
+                padding: 30px;
+                text-align: center;
+            }
+            .form-header h1 {
+                font-size: 2em;
+                margin-bottom: 10px;
+            }
+            .form-content {
+                padding: 40px;
+            }
+            .form-category {
+                margin-bottom: 30px;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 10px;
+            }
+            .form-category h3 {
+                color: #2d3748;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #667eea;
+            }
+            .form-group {
+                margin-bottom: 15px;
+
+            }
+            .form-group label {
+                display: block;
+                font-weight: 600;
+                color: #4a5568;
+                margin-bottom: 5px;
+            }
+            .form-group input {
+                /*width: 70%;*/
+                padding: 10px;
+                border: 2px solid #e2e8f0;
+                border-radius: 8px;
+                font-size: 14px;
+                transition: all 0.3s ease;
+            }
+            .form-group input:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            }
+            .form-actions {
+                display: flex;
+                gap: 15px;
+                justify-content: center;
+                margin-top: 30px;
+            }
+            .btn {
+                padding: 12px 30px;
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                text-decoration: none;
+                display: inline-block;
+            }
+            .btn-submit {
+                background: #667eea;
+                color: white;
+            }
+            .btn-submit:hover {
+                background: #5568d3;
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            }
+            .btn-cancel {
+                background: #e2e8f0;
+                color: #4a5568;
+            }
+            .btn-cancel:hover {
+                background: #cbd5e0;
+            }
+            /* Aligner les boutons radio sur une ligne */            
+            .radio-row {
+                display: flex; /* Utiliser display: ruby pour un alignement plus précis */
+                flex-direction: row;
+                align-items: center;
+                gap: 45px; /* espace entre chaque radio+label */
+                margin-left: 0;
+                padding-left: 0;
+                justify-content: flex-start;  /*alignement à gauche */
+            }
+            .radio-label {
+                display: flex;
+                align-items: center;
+                font-weight: normal;
+                margin: 0;
+                white-space: nowrap;
+                margin-left: 6px;         /* Très peu d'espace entre radio et texte */
+            }
+            .radio-label input[type="radio"] {
+                margin-right: 1px;
+            }
+            /* Style arrondi et moderne pour le select pays */
+            .form-group select {
+                width: 70%;
+                padding: 10px;
+                border: 2px solid #e2e8f0;
+                border-radius: 8px;
+                font-size: 14px;
+                background: #fff;
+                color: #4a5568;
+                transition: border-color 0.3s, box-shadow 0.3s;
+                appearance: none;
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.05);
+            }
+            .form-group select:focus {
+                outline: none;
+                border-color: #667eea;
+                box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+            }
+            /*style pour les cases à cocher en ligne*/
+            .checkbox-row {
+                width: 100%;
+                display: flex; /* Utiliser display: ruby pour un alignement plus précis */
+                flex-direction: row;
+                gap: 25px; /* espace entre chaque checkbox+label */
+                align-items: center;
+                margin-left: 0;
+                padding-left: 0;
+                justify-content: flex-start;  /*alignement à gauche */
+            }
+            .checkbox-label {
+                display: flex;
+                align-items: center;
+                font-weight: normal;
+                margin: 0;
+                white-space: nowrap;
+                margin-left: 6px;        
+            }
+            .checkbox-label input[type="checkbox"] {
+                width: 16px;
+                height: 16px;
+                min-width: 16px;
+                min-height: 16px;
+                margin-right: 6px;
+                box-sizing: border-box;
+                padding: 0;
+            }
+
+        </style>
+    </head>
+    <body>
+        <div class="form-container">
+            <div class="form-header">
+                <h1>{{ _('add_title') }}</h1>
+                <p>{{ _('add_subtitle') }}</p>
+                <p>{{ _('add_warning') }} </p>
+            </div>
+            {% if info_message %}
+                <div style="background:#e0f7fa;color:#006064;padding:12px 20px;border-radius:8px;
+                            margin:20px auto 0 auto;max-width:700px;text-align:center;font-size:1.1em;">
+                    {{ info_message }}
+                </div>
+            {% endif %}
+			<div class="form-content">
+			<form method="post" action="{{submit_url}}">		
+		
+				<div class="form-category"><h3>{{ _('form_cat01_Informations') }}</h3>
+					<div class="form-group" >
+						<label for="nom_unique">{{ _('nom_unique') }}</label>
+						<input type="text" id="nom_unique" name="nom_unique"  value="" style="width: 70%;">
+					</div>
+					
+					<div class="form-group">
+						<label for="type_camp">{{ _('type_camp') }}</label>
+                        <div class="radio-row">
+                            <label class="radio-label">
+                                <input type="radio" name="type_camp" value="ouvert" required>
+                                {{ _('type_camp_open') }}
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="type_camp" value="fermé">
+                                {{ _('type_camp_closed') }}
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="type_camp" value="semi-ouvert">
+                                {{ _('type_camp_clopen') }}
+                            </label>
+                        </div>
+					</div>
+							
+					<div class="form-group">
+						<label for="actif_dernieres_infos">{{ _('actif_dernieres_infos') }}</label>
+                        <div class="radio-row">
+                            <label class="radio-label">
+                                <input type="radio" name="actif_dernieres_infos" value="oui" required>
+                                {{ _('actif_dernieres_infos_oui') }}
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="actif_dernieres_infos" value="non">
+                                {{ _('actif_dernieres_infos_non') }}
+                            </label>
+                        </div>
+					</div>
+							
+					<div class="form-group">
+						<label for="derniere_date_info">{{ _('derniere_date_info') }}</label>
+						<input type="date" id="derniere_date_info" name="derniere_date_info" value="">
+					</div>
+				</div>
+				<div class="form-category"><h3>{{ _('form_cat02_Localisation') }}</h3>
+					<div class="form-group">
+						<label for="camp_latitude">{{ _('camp_latitude') }}</label>
+						<input type="number" id="camp_latitude" name="camp_latitude" value={{ lat_value }} step="any" required>
+					</div>
+						
+					<div class="form-group">
+						<label for="camp_longitude">{{ _('camp_longitude') }}</label>
+						<input type="number" id="camp_longitude" name="camp_longitude"  value={{ lng_value }} step="any" required>
+					</div>
+
+					<div class="form-group">
+						<label for="pays">{{ _('pays') }}</label>
+						<select id="pays" name="pays">
+							<option value="">{{ _('select_pays') }}</option>
+							{{ options_countries |indent(4)|safe }}
+							<!-- <option value="AFG" required>Afghanistan</option><option value="ALA" required>Åland Islands</option><option value="ALB" required>Albania</option><option value="DZA" required>Algeria</option><option value="ASM" required>American Samoa</option><option value="AND" required>Andorra</option><option value="AGO" required>Angola</option><option value="AIA" required>Anguilla</option><option value="ATA" required>Antarctica</option><option value="ATG" required>Antigua and Barbuda</option><option value="ARG" required>Argentina</option><option value="ARM" required>Armenia</option><option value="ABW" required>Aruba</option><option value="AUS" required>Australia</option><option value="AUT" required>Austria</option><option value="AZE" required>Azerbaijan</option><option value="BHS" required>Bahamas</option><option value="BHR" required>Bahrain</option><option value="BGD" required>Bangladesh</option><option value="BRB" required>Barbados</option><option value="BLR" required>Belarus</option><option value="BEL" required>Belgium</option><option value="BLZ" required>Belize</option><option value="BEN" required>Benin</option><option value="BMU" required>Bermuda</option><option value="BTN" required>Bhutan</option><option value="BOL" required>Bolivia, Plurinational State of</option><option value="BES" required>Bonaire, Sint Eustatius and Saba</option><option value="BIH" required>Bosnia and Herzegovina</option><option value="BWA" required>Botswana</option><option value="BVT" required>Bouvet Island</option><option value="BRA" required>Brazil</option><option value="IOT" required>British Indian Ocean Territory</option><option value="BRN" required>Brunei Darussalam</option><option value="BGR" required>Bulgaria</option><option value="BFA" required>Burkina Faso</option><option value="BDI" required>Burundi</option><option value="CPV" required>Cabo Verde</option><option value="KHM" required>Cambodia</option><option value="CMR" required>Cameroon</option><option value="CAN" required>Canada</option><option value="CYM" required>Cayman Islands</option><option value="CAF" required>Central African Republic</option><option value="TCD" required>Chad</option><option value="CHL" required>Chile</option><option value="CHN" required>China</option><option value="CXR" required>Christmas Island</option><option value="CCK" required>Cocos (Keeling) Islands</option><option value="COL" required>Colombia</option><option value="COM" required>Comoros</option><option value="COG" required>Congo</option><option value="COD" required>Congo, Democratic Republic of the</option><option value="COK" required>Cook Islands</option><option value="CRI" required>Costa Rica</option><option value="CIV" required>Côte d'Ivoire</option><option value="HRV" required>Croatia</option><option value="CUB" required>Cuba</option><option value="CUW" required>Curaçao</option><option value="CYP" required>Cyprus</option><option value="CZE" required>Czechia</option><option value="DNK" required>Denmark</option><option value="DJI" required>Djibouti</option><option value="DMA" required>Dominica</option><option value="DOM" required>Dominican Republic</option><option value="ECU" required>Ecuador</option><option value="EGY" required>Egypt</option><option value="SLV" required>El Salvador</option><option value="GNQ" required>Equatorial Guinea</option><option value="ERI" required>Eritrea</option><option value="EST" required>Estonia</option><option value="SWZ" required>Eswatini</option><option value="ETH" required>Ethiopia</option><option value="FLK" required>Falkland Islands (Malvinas)</option><option value="FRO" required>Faroe Islands</option><option value="FJI" required>Fiji</option><option value="FIN" required>Finland</option><option value="FRA" required>France</option><option value="GUF" required>French Guiana</option><option value="PYF" required>French Polynesia</option><option value="ATF" required>French Southern Territories</option><option value="GAB" required>Gabon</option><option value="GMB" required>Gambia</option><option value="GEO" required>Georgia</option><option value="DEU" required>Germany</option><option value="GHA" required>Ghana</option><option value="GIB" required>Gibraltar</option><option value="GRC" required>Greece</option><option value="GRL" required>Greenland</option><option value="GRD" required>Grenada</option><option value="GLP" required>Guadeloupe</option><option value="GUM" required>Guam</option><option value="GTM" required>Guatemala</option><option value="GGY" required>Guernsey</option><option value="GIN" required>Guinea</option><option value="GNB" required>Guinea-Bissau</option><option value="GUY" required>Guyana</option><option value="HTI" required>Haiti</option><option value="HMD" required>Heard Island and McDonald Islands</option><option value="VAT" required>Holy See</option><option value="HND" required>Honduras</option><option value="HKG" required>Hong Kong</option><option value="HUN" required>Hungary</option><option value="ISL" required>Iceland</option><option value="IND" required>India</option><option value="IDN" required>Indonesia</option><option value="IRN" required>Iran, Islamic Republic of</option><option value="IRQ" required>Iraq</option><option value="IRL" required>Ireland</option><option value="IMN" required>Isle of Man</option><option value="ISR" required>Israel</option><option value="ITA" required>Italy</option><option value="JAM" required>Jamaica</option><option value="JPN" required>Japan</option><option value="JEY" required>Jersey</option><option value="JOR" required>Jordan</option><option value="KAZ" required>Kazakhstan</option><option value="KEN" required>Kenya</option><option value="KIR" required>Kiribati</option><option value="PRK" required>Korea, Democratic People's Republic of</option><option value="KOR" required>Korea, Republic of</option><option value="KWT" required>Kuwait</option><option value="KGZ" required>Kyrgyzstan</option><option value="LAO" required>Lao People's Democratic Republic</option><option value="LVA" required>Latvia</option><option value="LBN" required>Lebanon</option><option value="LSO" required>Lesotho</option><option value="LBR" required>Liberia</option><option value="LBY" required>Libya</option><option value="LIE" required>Liechtenstein</option><option value="LTU" required>Lithuania</option><option value="LUX" required>Luxembourg</option><option value="MAC" required>Macao</option><option value="MDG" required>Madagascar</option><option value="MWI" required>Malawi</option><option value="MYS" required>Malaysia</option><option value="MDV" required>Maldives</option><option value="MLI" required>Mali</option><option value="MLT" required>Malta</option><option value="MHL" required>Marshall Islands</option><option value="MTQ" required>Martinique</option><option value="MRT" required>Mauritania</option><option value="MUS" required>Mauritius</option><option value="MYT" required>Mayotte</option><option value="MEX" required>Mexico</option><option value="FSM" required>Micronesia, Federated States of</option><option value="MDA" required>Moldova, Republic of</option><option value="MCO" required>Monaco</option><option value="MNG" required>Mongolia</option><option value="MNE" required>Montenegro</option><option value="MSR" required>Montserrat</option><option value="MAR" required>Morocco</option><option value="MOZ" required>Mozambique</option><option value="MMR" required>Myanmar</option><option value="NAM" required>Namibia</option><option value="NRU" required>Nauru</option><option value="NPL" required>Nepal</option><option value="NLD" required>Netherlands, Kingdom of the</option><option value="NCL" required>New Caledonia</option><option value="NZL" required>New Zealand</option><option value="NIC" required>Nicaragua</option><option value="NER" required>Niger</option><option value="NGA" required>Nigeria</option><option value="NIU" required>Niue</option><option value="NFK" required>Norfolk Island</option><option value="MKD" required>North Macedonia</option><option value="MNP" required>Northern Mariana Islands</option><option value="NOR" required>Norway</option><option value="OMN" required>Oman</option><option value="PAK" required>Pakistan</option><option value="PLW" required>Palau</option><option value="PSE" required>Palestine, State of</option><option value="PAN" required>Panama</option><option value="PNG" required>Papua New Guinea</option><option value="PRY" required>Paraguay</option><option value="PER" required>Peru</option><option value="PHL" required>Philippines</option><option value="PCN" required>Pitcairn</option><option value="POL" required>Poland</option><option value="PRT" required>Portugal</option><option value="PRI" required>Puerto Rico</option><option value="QAT" required>Qatar</option><option value="REU" required>Réunion</option><option value="ROU" required>Romania</option><option value="RUS" required>Russian Federation</option><option value="RWA" required>Rwanda</option><option value="BLM" required>Saint Barthélemy</option><option value="SHN" required>Saint Helena, Ascension and Tristan da Cunha</option><option value="KNA" required>Saint Kitts and Nevis</option><option value="LCA" required>Saint Lucia</option><option value="MAF" required>Saint Martin (French part)</option><option value="SPM" required>Saint Pierre and Miquelon</option><option value="VCT" required>Saint Vincent and the Grenadines</option><option value="WSM" required>Samoa</option><option value="SMR" required>San Marino</option><option value="STP" required>Sao Tome and Principe</option><option value="SAU" required>Saudi Arabia</option><option value="SEN" required>Senegal</option><option value="SRB" required>Serbia</option><option value="SYC" required>Seychelles</option><option value="SLE" required>Sierra Leone</option><option value="SGP" required>Singapore</option><option value="SXM" required>Sint Maarten (Dutch part)</option><option value="SVK" required>Slovakia</option><option value="SVN" required>Slovenia</option><option value="SLB" required>Solomon Islands</option><option value="SOM" required>Somalia</option><option value="ZAF" required>South Africa</option><option value="SGS" required>South Georgia and the South Sandwich Islands</option><option value="SSD" required>South Sudan</option><option value="ESP" required>Spain</option><option value="LKA" required>Sri Lanka</option><option value="SDN" required>Sudan</option><option value="SUR" required>Suriname</option><option value="SJM" required>Svalbard and Jan Mayen</option><option value="SWE" required>Sweden</option><option value="CHE" required>Switzerland</option><option value="SYR" required>Syrian Arab Republic</option><option value="TWN" required>Taiwan, Province of China</option><option value="TJK" required>Tajikistan</option><option value="TZA" required>Tanzania, United Republic of</option><option value="THA" required>Thailand</option><option value="TLS" required>Timor-Leste</option><option value="TGO" required>Togo</option><option value="TKL" required>Tokelau</option><option value="TON" required>Tonga</option><option value="TTO" required>Trinidad and Tobago</option><option value="TUN" required>Tunisia</option><option value="TUR" required>Türkiye</option><option value="TKM" required>Turkmenistan</option><option value="TCA" required>Turks and Caicos Islands</option><option value="TUV" required>Tuvalu</option><option value="UGA" required>Uganda</option><option value="UKR" required>Ukraine</option><option value="ARE" required>United Arab Emirates</option><option value="GBR" required>United Kingdom of Great Britain and Northern Ireland</option><option value="USA" required>United States of America</option><option value="UMI" required>United States Minor Outlying Islands</option><option value="URY" required>Uruguay</option><option value="UZB" required>Uzbekistan</option><option value="VUT" required>Vanuatu</option><option value="VEN" required>Venezuela, Bolivarian Republic of</option><option value="VNM" required>Viet Nam</option><option value="VGB" required>Virgin Islands (British)</option><option value="VIR" required>Virgin Islands (U.S.)</option><option value="WLF" required>Wallis and Futuna</option><option value="ESH" required>Western Sahara</option><option value="YEM" required>Yemen</option><option value="ZMB" required>Zambia</option><option value="ZWE" required>Zimbabwe</option>-->
+						</select>
+					</div>
+
+					<div class="form-group">
+						<label for="camp_adresse">{{ _('camp_adresse') }}</label>
+						<input type="text" id="camp_adresse" name="camp_adresse"  value="" style="width: 70%;">
+					</div>
+				
+
+				</div>
+				<div class="form-category"><h3>{{ _('form_cat03_Details') }}</h3>
+					<div class="form-group">
+						<label for="capacite">{{ _('capacite') }}</label>
+						<input type="number" id="capacite" name="capacite"  value="" step="any">
+					</div>
+					
+					<div class="form-group">
+						<label style="font-weight:600; color:#4a5568; margin-bottom:5px; display:block;">Quel type de public est hébergé : cochez la ou les cases concernées</label>
+						<div class="checkbox-row">					
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="hommes" value="oui" >
+                                {{ _('hommes') }}
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="femmes" value="oui">
+                                {{ _('femmes') }}
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="mineurs" value="oui">
+                                {{ _('mineurs') }}
+                            </label>
+                        </div>
+					</div>
+				
+					<div class="form-group">
+						<label for="ouverture/premiere_date">{{ _('ouverture/premiere_date') }}</label>
+						<input type="date" id="ouverture/premiere_date" name="ouverture/premiere_date" value="">
+					</div>
+					
+					<div class="form-group">
+						<label for="fermeture_date">{{ _('fermeture_date') }}</label>
+						<input type="date" id="fermeture_date" name="fermeture_date" value="">
+					</div>
+					
+					<div class="form-group">
+						<label for="infrastructure_norm">{{ _('infrastructure_norm') }}</label> 
+						<select id="infrastructure_norm" name="infrastructure_norm">
+							<option value="">{{ _('select_infrastructure') }}</option>
+							{{ options_infra |indent(4)|safe}}
+							<!-- <option value="Autre">Autre</option><option value="bateau">bateau</option><option value="bungalows">bungalows</option><option value="containers">containers</option><option value="containers / hangars">containers / hangars</option><option value="containers / transport">containers / transport</option><option value="dur">dur</option><option value="dur / conversion">dur / conversion</option><option value="dur / enfermement">dur / enfermement</option><option value="dur / hébergement">dur / hébergement</option><option value="dur / police">dur / police</option><option value="dur / tourisme">dur / tourisme</option><option value="dur / transport">dur / transport</option><option value="hangar">hangar</option><option value="mixte containers - bungalows">mixte containers - bungalows</option><option value="mixte containers - dur">mixte containers - dur</option><option value="mixte containers - dur - tentes">mixte containers - dur - tentes</option><option value="mixte containers - dur - tentes / conversion ">mixte containers - dur - tentes / conversion </option><option value="mixte containers - dur / conversion">mixte containers - dur / conversion</option><option value="mixte containers - gymnase / conversion">mixte containers - gymnase / conversion</option><option value="mixte containers - rubb hall">mixte containers - rubb hall</option><option value="mixte containers - tentes">mixte containers - tentes</option><option value="mixte dur - rubb hall">mixte dur - rubb hall</option><option value="mixte dur - rubb hall / conversion">mixte dur - rubb hall / conversion</option><option value="mixte dur - tentes">mixte dur - tentes</option><option value="rubb hall">rubb hall</option><option value="tentes">tentes</option>-->       
+						</select>
+					</div>
+					<div class="form-group">
+						<label for="infrastructure_autre">{{ _('infrastructure_autre') }}</label>
+						<input type="text" id="infrastructure_autre" name="infrastructure_autre"  value="" style="width: 70%;">
+					</div>
+					
+					<div class="form-group">
+						<label for="infrastructure_avant_conversion">{{ _('infrastructure_avant_conversion') }}</label>
+						<input type="text" id="infrastructure_avant_conversion" name="infrastructure_avant_conversion"  value="" style="width: 70%;">
+					</div>
+				
+
+				</div>
+				<div class="form-category"><h3>{{ _('form_cat04_Metadata') }}</h3>
+					<div class="form-group">
+						<label for="mail_contributeur">{{ _('mail_contributeur') }}</label>
+						<input type="email" id="mail_contributeur" name="mail_contributeur" required pattern="^[^@\s]+@[^@\s]+\.[^@\s]+$" placeholder="exemple@email.com" style="width: 70%;">
+					</div>
+					<div class="form-group">
+						<label style="font-weight:600; color:#4a5568; margin-bottom:5px; display:block;">{{ _('type_source') }}</label>
+						<div class="checkbox-row">
+							<input type="checkbox" id="observation" name="type_source_observation" value="oui">
+							<label for="observation">{{ _('type_source_observation') }}</label>
+							<input type="checkbox" id="journalism" name="type_source_journalism" value="oui">
+							<label for="journalism">{{ _('type_source_journalism') }}</label>
+							<input type="checkbox" id="web" name="type_source_Web" value="oui">
+							<label for="web">{{ _('type_source_Web') }}</label>
+						</div>
+					</div>
+				
+					<div class="form-group">
+						<label for="bdd_source">{{ _('bdd_source') }}</label>
+						<textarea id="bdd_source" name="bdd_source" rows="5" style="width:100%; resize:vertical; border-radius:8px; border:2px solid #e2e8f0; padding:10px; font-size:14px;"></textarea>
+					</div>
+
+					<div class="form-group">
+						<label for="comment">{{ _('comment') }}</label>
+						<textarea id="comment" name="comment" rows="5" style="width:100%; resize:vertical; border-radius:8px; border:2px solid #e2e8f0; padding:10px; font-size:14px;"></textarea>
+					</div>
+				</div>
+				<div class="form-category"><h3> {{ _('verification') }}</h3>
+					<div class="form-group">
+						<label for="captcha">{{ captcha_question }}</label>
+						<input type="text" id="captcha" name="captcha" placeholder= {{ _('captcha_placeholder') }} required>
+					</div>
+				</div>
+				<div class="form-actions">
+					<button type="submit" class="btn btn-submit">{{ _('save')}} </button>
+					<a href="{{index_url}}" class="btn btn-cancel">{{ _('cancel')}} </a>
+				</div>
+		</form>
+			</div>
+		</div>
+	</body>
+</html>
