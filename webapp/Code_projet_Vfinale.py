@@ -11,6 +11,7 @@ import geopandas as gpd
 import os
 import random
 from folium.plugins import VectorGridProtobuf
+from folium.plugins import GroupedLayerControl
 from flask_cors import CORS, cross_origin
 # import error handling file from where you have defined it
 import error
@@ -105,8 +106,8 @@ def load_data():
         
         print("-------------------- Connecting to database -----------------------")
         #print("postgresql://camps_reader:Camps_2026@localhost:5432/camps")
-        #engine = create_engine('postgresql://camps_reader:Camps_2026@localhost:5432/camps')
-        engine = create_engine('postgresql://postgres:postgres@localhost:5432/camps_europe')
+        engine = create_engine('postgresql://camps_reader:Camps_2026@localhost:5432/camps')
+        #engine = create_engine('postgresql://postgres:postgres@localhost:5432/camps_europe')
         
         ORM_conn=engine.connect()
         ORM_conn
@@ -208,8 +209,8 @@ def get_locale():
 
 def _(key, **kwargs):
     global TRANSLATIONS
-    #lang = get_locale()
-    lang='en' #en mode débug pour forcer l'anglais et éviter les problèmes de traduction pendant le développement
+    lang = get_locale()
+    #lang='en' #en mode débug pour forcer l'anglais et éviter les problèmes de traduction pendant le développement
     txt = TRANSLATIONS[lang].get(key, key)
     return txt.format(**kwargs) if kwargs else txt
 
@@ -429,13 +430,20 @@ def create_camps_map(dataframe, newcamps):
 
     m = folium.Map(location=[center_lat, center_lon], zoom_start=5, max_bounds=True)
 
-    folium.TileLayer('CartoDB positron', name=_('map_background')).add_to(m)
+    #folium.TileLayer('CartoDB positron', name=_('map_background')).add_to(m)
 
     # Deux couches de camps, les actifs et les inactifs
-    camps_actifs_layer = folium.FeatureGroup(name=_('map_layer_actifs'), show=True)
-    camps_inactifs_layer = folium.FeatureGroup(name=_('map_layer_inactifs'), show=False)
+    #camps_actifs_layer = folium.FeatureGroup(name=_('map_layer_actifs'), show=True)
+    #camps_inactifs_layer = folium.FeatureGroup(name=_('map_layer_inactifs'), show=False)
 
+    camps_actifs_open_layer = folium.FeatureGroup(name=_('type_camp_open'), show=True)
+    camps_actifs_closed_layer = folium.FeatureGroup(name=_('type_camp_closed'), show=True)
+    camps_actifs_clopen_layer = folium.FeatureGroup(name=_('type_camp_clopen'), show=True)
 
+    camps_inactifs_open_layer = folium.FeatureGroup(name=_('type_camp_open'), show=False)
+    camps_inactifs_closed_layer = folium.FeatureGroup(name=_('type_camp_closed'), show=False)
+    camps_inactifs_clopen_layer = folium.FeatureGroup(name=_('type_camp_clopen'), show=False)
+    
     for idx, row in dataframe.iterrows():
         #print(f"Processing camp {idx} - {row.get('nom_unique', 'N/A')}")
         date_objet = row.get('derniere_date_info', None) if  not pd.isnull(row.get('derniere_date_info', None)) else datetime.strptime('2000', '%Y')
@@ -444,6 +452,8 @@ def create_camps_map(dataframe, newcamps):
         #print(annee_derniere_date_info)
         
         actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (annee_derniere_date_info >= 2018)
+        ouvert_ferme = row.get('type_camp', 'N/A') 
+        #print(ouvert_ferme)
         
         # Attention, classificationweb est précalculé en base de données à partir d'une CAH sur AFCM 
         # pour tous les camps couverts par les CLC et de qualité de localisation satisfaisante
@@ -481,12 +491,72 @@ def create_camps_map(dataframe, newcamps):
             )
         
         if( actif):
-            marker.add_to(camps_actifs_layer)
-        else:
-            marker.add_to(camps_inactifs_layer)
+            if (ouvert_ferme == 'ouvert' ) : 
+                marker.add_to(camps_actifs_open_layer)
+            elif (ouvert_ferme == 'semi-ouvert' ) : 
+                marker.add_to(camps_actifs_clopen_layer)
+            else  : 
+                marker.add_to(camps_actifs_closed_layer)
+        else: 
+            #marker.add_to(camps_inactifs_layer)
+            if (ouvert_ferme == 'ouvert' ) : 
+                marker.add_to(camps_inactifs_open_layer)
+            elif (ouvert_ferme == 'semi-ouvert' ) : 
+                marker.add_to(camps_inactifs_clopen_layer)
+            else  : 
+                marker.add_to(camps_inactifs_closed_layer)
+                
+    camps_actifs_open_layer.add_to(m)
+    camps_actifs_clopen_layer.add_to(m)
+    camps_actifs_closed_layer.add_to(m)
+    
+    camps_inactifs_open_layer.add_to(m)
+    camps_inactifs_clopen_layer.add_to(m)
+    camps_inactifs_closed_layer.add_to(m)
 
-    camps_actifs_layer.add_to(m)
-    camps_inactifs_layer.add_to(m)
+    #camps_actifs_layer.add_to(m)
+    #camps_inactifs_layer.add_to(m)
+    
+    # Nouveaux camps ajoutés via le formulaire
+    #print("Nouveaux camps ajoutés via le formulaire")
+    newcamps_clean = newcamps.dropna(subset=['camp_latitude', 'camp_longitude']).copy().reset_index(drop=True)
+    if not newcamps_clean.empty:
+        camps_nouveaux_layer = folium.FeatureGroup(name=_('map_layer_new'), show=True)
+        #print(newcamps_clean.shape)
+        #print(newcamps_clean.columns)
+        for idx, row in newcamps_clean.iterrows():
+            zone = 'non vérifié'
+            #color = ZONE_COLORS[zone]
+            color = 'blue'
+            
+            #print(f"Processing new camp {idx} - {row.get('nom_unique', 'Camp inconnu')} - {row.get('derniere_date_info', 'N/A')}")
+            date_objet = row.get('derniere_date_info', None) if  not pd.isnull(row.get('derniere_date_info', None)) else datetime.strptime('2000', '%Y')
+            annee_derniere_date_info = date_objet.year         
+            #print(annee_derniere_date_info)  
+            actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (annee_derniere_date_info >= 2018)
+            #icon_html = f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid {color};border-bottom-color:{color};"></div>"""
+            icon_html = get_zone_shape(row.get('type_camp'), zone, color, actif)
+            icon = folium.DivIcon(html=icon_html, icon_size=(10,10), icon_anchor=(7,7))
+
+            
+            camp_name = row.get('nom_unique', 'Camp inconnu').replace("'", "\\'")
+
+            popup_html = f"""
+                <div style="font-family:Arial,sans-serif;min-width:200px;">
+                    <b style="font-size:14px;">{row.get('nom_unique', 'N/A')}</b><br>
+                    <span style="color:#666;">{_('camp_type')} : {row.get('type_camp', 'N/A')}</span><br>
+                    <span style="color:#666;">{_('camp_actif')} : {actif}</span><br>
+                    <span style="color:#666;">{_('camp_classification')} : {zone}</span><br>
+                </div>
+                """
+            folium.Marker(
+                location=[row['camp_latitude'], row['camp_longitude']],
+                popup=folium.Popup(popup_html, max_width=300),
+                tooltip=row.get('nom_unique', 'Camp non vérifié'),
+                icon=icon
+            ).add_to(camps_nouveaux_layer)
+        camps_nouveaux_layer.add_to(m)
+        
     folium.GeoJson(gdf_schengen, name=_('map_layer_schengen'),
                    style_function=lambda x: {'fillColor':'none', 'color':'blue', 'weight':2}).add_to(m)
 
@@ -547,44 +617,22 @@ def create_camps_map(dataframe, newcamps):
 
     VectorGridProtobuf(url, _('map_layer_degurba') , options, show=False).add_to(m)
 
-    # Nouveaux camps ajoutés via le formulaire
-    #print("Nouveaux camps ajoutés via le formulaire")
-    newcamps_clean = newcamps.dropna(subset=['camp_latitude', 'camp_longitude']).copy().reset_index(drop=True)
-    if not newcamps_clean.empty:
-        #print(newcamps_clean.shape)
-        #print(newcamps_clean.columns)
-        for idx, row in newcamps_clean.iterrows():
-            zone = 'non vérifié'
-            color = ZONE_COLORS[zone]
-            
-            #print(f"Processing new camp {idx} - {row.get('nom_unique', 'Camp inconnu')} - {row.get('derniere_date_info', 'N/A')}")
-            date_objet = row.get('derniere_date_info', None) if  not pd.isnull(row.get('derniere_date_info', None)) else datetime.strptime('2000', '%Y')
-            annee_derniere_date_info = date_objet.year         
-            #print(annee_derniere_date_info)  
-            actif = row.get('actif_dernieres_infos', 'non') == 'oui' and (annee_derniere_date_info >= 2018)
-            #icon_html = f"""<div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid {color};border-bottom-color:{color};"></div>"""
-            icon_html = get_zone_shape(row.get('type_camp'), zone, color, actif)
-            icon = folium.DivIcon(html=icon_html, icon_size=(10,10), icon_anchor=(7,7))
-
-            
-            camp_name = row.get('nom_unique', 'Camp inconnu').replace("'", "\\'")
-
-            popup_html = f"""
-                <div style="font-family:Arial,sans-serif;min-width:200px;">
-                    <b style="font-size:14px;">{row.get('nom_unique', 'N/A')}</b><br>
-                    <span style="color:#666;">{_('camp_type')} : {row.get('type_camp', 'N/A')}</span><br>
-                    <span style="color:#666;">{_('camp_actif')} : {actif}</span><br>
-                    <span style="color:#666;">{_('camp_classification')} : {zone}</span><br>
-                </div>
-                """
-            folium.Marker(
-                location=[row['camp_latitude'], row['camp_longitude']],
-                popup=folium.Popup(popup_html, max_width=300),
-                tooltip=row.get('nom_unique', 'Camp non vérifié'),
-                icon=icon
-            ).add_to(m)
-
+    
     folium.LayerControl().add_to(m)
+    
+    #https://python-visualization.github.io/folium/latest/user_guide/plugins/grouped_layer_control.html
+    GroupedLayerControl(
+        groups={_('map_layer_actifs'): [camps_actifs_open_layer, camps_actifs_clopen_layer, camps_actifs_closed_layer]},
+        exclusive_groups=False,
+        collapsed=False,
+    ).add_to(m)
+    GroupedLayerControl(
+        groups={_('map_layer_inactifs'): [camps_inactifs_open_layer, camps_inactifs_clopen_layer, camps_inactifs_closed_layer]},
+        exclusive_groups=False,
+        collapsed=False,
+    ).add_to(m)
+    #control.add_to(m)
+
     m.get_root().html.add_child(folium.Element(create_legend_html()))
 
     # Add double-click functionality to open add_camp form

@@ -15,7 +15,7 @@
             .header h1 {font-size:2.5em; margin-bottom:10px;}
             .content {display:grid; grid-template-columns:33.33% 66.67%; gap:30px; padding:40px;}
             .section {background:#f8f9fa; border-radius:15px; padding:15px; box-shadow:0 4px 15px rgba(0,0,0,0.08);}
-            .section h2 {color:#2d3748; font-size:1.5em; margin-bottom:20px; display:flex; align-items:center; gap:10px;}
+            .section h2 {color:#2d3748; font-size:24px; margin-bottom:20px; display:flex; align-items:center; gap:10px;}
             .section h2::before {content:''; width:4px; height:24px; background:linear-gradient(#667eea,#764ba2); border-radius:2px;}
             .radar-section {grid-column:1; grid-row:1;}
             .button-section {grid-column:2; grid-row:2; display:flex; flex-direction:column; gap:20px;}
@@ -36,12 +36,24 @@
                 .content {grid-template-columns:1fr;}
                 .radar-section{grid-row:2;} .button-section{grid-row:3;} .map-section{grid-row:1;}
             }
-            /* Onglets des 2 radars */
+            /* Onglets des 2 radars */ 
             .tab-container { margin-bottom: 20px; }
             .tab-btn { background: #e2e8f0; border: none; padding: 10px 24px; cursor: pointer; font-weight:600; border-radius:8px 8px 0 0; margin-right:2px;}
             .tab-btn.active { background: #667eea; color: white; }
             .tab-content { display: none; }
             .tab-content.active { display: block; }
+            /* Onglets graphiques / about */
+            .tab-content2 { display: none; }
+            .tab-content2.active { display:grid; grid-template-columns:33.33% 66.67%; gap:30px; padding:40px; }
+            .tab-content3 { display: none; }
+            .tab-content3.active { display:grid; grid-template-columns: 100% ; gap:30px; padding:40px; }
+            .tab-btn2 { background: #e2e8f0; border: none; padding: 10px 24px; cursor: pointer; font-weight:600; border-radius:8px 8px 0 0; margin-right:2px;}
+            .tab-btn2.active { background: #764ba2; color: white; }
+            .pinfo {font-size: 14px;}
+            .tabbed { list-style: none; counter-reset: item; padding-left: 0; } 
+            .tabbed li { counter-increment: item; margin-left: 2em; /* indentation du texte */ position: relative; } 
+            .tabbed li::before { content: counter(item) "."; position: absolute; left: -2em; /* crée l'effet "tabulation" */ width: 1.5em; /* espace réservé pour le numéro */ text-align: right; }
+
         </style>
     </head>
     <body>
@@ -56,7 +68,12 @@
                 <h1>{{ _('title') }}</h1>
                 <p>{{ _('subtitle') }}</p>
             </div>
-            <div class="content">
+            <div class="tab-container">
+                <button class="tab-btn2 active" onclick="showTabGeneral('tab1_graphics')">{{ _('main') }}</button>
+                <button class="tab-btn2" onclick="showTabGeneral('aboutModal')">{{ _('about') }}</button>
+            </div>
+
+            <div class="tab-content2 active" id="tab1_graphics" >
                 <div class="section radar-section">
                     <h2>{{ _('radar_title') }}</h2>
                     <div class="camp-info" id="campInfo" style="display:none;">
@@ -84,7 +101,7 @@
                 <div class="section button-section">
                     <h2>{{ _('actions') }}</h2>
                     <a class="btn-add" href="{{ url_for('create_camp') }}">{{ _('add_camp') }}</a>
-                    <button class="btn-about" onclick="showAboutModal()">{{ _('about') }}</button>
+                    <!-- <button class="btn-about" onclick="showAboutModal()">{{ _('about') }}</button> -->
                 </div>
 
                 <div class="section map-section">
@@ -92,16 +109,32 @@
                     <div id="map">{{ map_html|safe }} </div> 
                 </div>
             </div>
-        </div>
 
-        <!-- Modal À propos -->
-        <div id="aboutModal" class="modal">
-            <div class="modal-content">
-                <span class="close" onclick="closeAboutModal()">&times;</span>
-                <h2>{{ _('about') }}</h2>
-                
-                <p>{{ _('about_text')|safe }}</p>
-                
+            <!-- Modal À propos class="modal" -->
+            <div class="tab-content3" id="aboutModal">
+                <div class="section" style="grid-column:1; grid-row:1; overflow: hidden;"><!--class="modal-content"-->
+                    <!-- <span class="close" onclick="closeAboutModal()">&times;</span> -->
+                    <h2>{{ _('about_objectif_title') }}</h2>
+                    <p class="pinfo">{{ _('about_objectif_text')|safe }}</p>
+                </div>
+                <div class="section" style="grid-column:1; grid-row:2; overflow: hidden;">
+                    <h2>{{ _('about_voc_title') }}</h2>
+                    <p class="pinfo">{{ _('about_voc_text')|safe }}</p>
+                </div>
+                <div class="section" style="grid-column:1; grid-row:3; overflow: hidden;">
+                    <h2>{{ _('about_howto_title') }}</h2>
+                    <p class="pinfo">{{ _('about_howto_text')|safe }}</p>
+                    <p class="pinfo">{{ _('about_howto_text2')|safe }}</p>
+                </div>
+                <div class="section" style="grid-column:1; grid-row:4; overflow: hidden;">
+                    <h2>{{ _('about_source_title') }}</h2>
+                    <p class="pinfo">{{ _('about_source_text')|safe }}</p>
+                </div>                
+                <div class="section" style="grid-column:1; grid-row:5; overflow: hidden;">
+                    <h2>{{ _('about_credit_title') }}</h2>
+                    <p class="pinfo">{{ _('about_credit_text')|safe }}</p>
+                    <p class="pinfo">{{ _('about_credit_text2')|safe }}</p>
+                </div>
             </div>
         </div>
 
@@ -315,6 +348,19 @@
                     document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
                 }else{
                     document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+                }
+                document.getElementById(tabId).classList.add('active');
+            }
+            // Onglets principaux
+            function showTabGeneral(tabId) {
+                document.querySelectorAll('.tab-btn2').forEach(btn => btn.classList.remove('active'));
+                //document.querySelectorAll('.tab-content2').forEach(tab => tab.classList.remove('active'));
+                if(tabId==='tab1_graphics'){
+                    document.getElementById('aboutModal').classList.remove('active');
+                    document.querySelector('.tab-btn2:nth-child(1)').classList.add('active');
+                }else{
+                    document.getElementById('tab1_graphics').classList.remove('active');
+                    document.querySelector('.tab-btn2:nth-child(2)').classList.add('active');
                 }
                 document.getElementById(tabId).classList.add('active');
             }
