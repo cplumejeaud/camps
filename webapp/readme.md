@@ -17,7 +17,13 @@ Le code source est disponible sur le github de l'enseignante, sous licence Affer
 
 ![Interface_2025-12-05](./Interface_2025-12-05.png)
 
-Attention "Ajouter un nouveau camps" ne marche pas. Ce sera modifié plus tard.
+Depuis le 27 février 2025, "Ajouter un nouveau camps" fonctionne.
+
+## Allure de l'application le 27 février 2025, après améliorations
+
+![eurocamps_2026-02-27](./eurocamps_2026-02-27.png)
+
+Des explications détaillées sur le propos et le fonctionnement de l'application sont accessibles en cliquant sur l'onglet "A propos". 
 
 ## Installation
 
